@@ -9,6 +9,13 @@ The pages should be non-overlapping.
 They should be in 3D.
 
 
+WHAT TO DO
+* get bezier surface with no transform working to deform a single point
+* visualise a point cloud with deformations applied
+* make it a mesh and deform that
+* turn it into a volume based on within distance of page and turn that into voxel array
+
+
 How do you generate N structured pages? Should be able to do something with splines?
 
 The question is
