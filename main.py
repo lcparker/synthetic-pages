@@ -181,19 +181,25 @@ def distance_to_sheet(grid: np.ndarray, sheet: np.ndarray) -> np.ndarray:
     raise NotImplementedError()
 
 
-from math import comb, pow
-def bernstein(index: int, degree: int, t: float) -> float:
-    return comb(degree, index) * pow(t, index) * pow(1-t,degree - index)
+from math import comb
+def bernstein(index: int, degree: int, t: np.ndarray) -> np.ndarray:
+    return comb(degree, index) * np.power(t, index) * np.power(1 - t, degree - index)
 
 def bezier(control_points: np.ndarray, p: np.ndarray) -> float:
+    """
+    Computes Q(u, v) = sum_over(i,j) B_i,j J_n,i(u) K_m,j(v)
+
+    Where B_ij is the ijth control point (scalar) you can adjust the magnitude
+    of the control point value, which is like moving it along the z axis.
+    """ 
     assert p.shape[-1] == 2
     assert len(p.shape) == 3 # (H,W,2)
     n, m = control_points.shape
     u = p[..., 0]
     v = p[..., 1]
     
-    B_u = np.array([bernstein_vectorized(i, n - 1, u) for i in range(n)])
-    B_v = np.array([bernstein_vectorized(j, m - 1, v) for j in range(m)])
+    B_u = np.array([bernstein(i, n - 1, u) for i in range(n)])
+    B_v = np.array([bernstein(j, m - 1, v) for j in range(m)])
     
     B_uv = np.einsum('ijk, ljk -> iljk', B_u, B_v)
     zs = np.einsum('ij, ijkl -> kl',control_points, B_uv)
@@ -245,8 +251,6 @@ def _test_bezier_visual():
     
 
 
-## now bezier is
-# Q(u, v) = sum_over(i,j) B_i,j J_n,i(u) K_m,j(v)
 
 """
 How to generalise to multiple planes such that they don't intersect?
