@@ -33,6 +33,7 @@ identity most places except where there are local variations)
 import numpy as np
 from scipy.interpolate import make_interp_spline
 from scipy.interpolate import BSpline
+import matplotlib.pyplot as plt
 
 Spline2D = tuple[BSpline, BSpline]
 
@@ -74,6 +75,7 @@ class Plane:
         self.origin = origin
         self.normal = normal
 
+#################################
 
 class HomogeneousTransform:
     def __init__(self, matrix=None):
@@ -150,49 +152,14 @@ class TestHomogeneousTransform(unittest.TestCase):
         expected_points = np.array([[3, 3, 3], [5, 5, 5], [7, 7, 7]])
         assert_array_almost_equal(transformed_points, expected_points)
 
-def run_tests():
+def run_transform_tests():
     suite = unittest.TestLoader().loadTestsFromTestCase(TestHomogeneousTransform)
     unittest.TextTestRunner().run(suite)
 
-def deform_plane_as_grid(world_transform: HomogeneousTransform, bounding_box: BoundingBox2D, grid_density: int) -> np.ndarray:
-    spline2d = make_2d_spline(bounding_box)
-    xs = np.linspace(bounding_box.min[0], bounding_box.max[0], grid_density)
-    ys = np.linspace(bounding_box.min[1], bounding_box.max[1], grid_density)
+run_transform_tests()
 
-    x_points = spline2d[0](xs)
-    y_points = spline2d[1](ys)
 
-    X, Y = np.meshgrid(x_points, y_points)
-    plane_grid_3d = np.stack((X.T, Y.T, np.zeros(X.T.shape)), axis=-1)
-
-    plane_grid_world = world_transform.apply(plane_grid_3d)
-
-    return plane_grid_world.reshape(-1, 3)
-
-import matplotlib.pyplot as plt
-def visualize_grid(grid):
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    xs = grid[:, 0]
-    ys = grid[:, 1]
-    zs = grid[:, 2]
-
-    ax.scatter(xs, ys, zs, c='b', marker='o')
-
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-
-    plt.show()
-    
-# compute distances to mesh
-
-def bounding_box_to_plane(bbox: BoundingBox2D, world_transform: HomogeneousTransform) -> "Mesh":
-    """
-    Creates a Trimesh object representing the bounding box as a plane with world_transform applied to it.
-    """
-    return None
+###############################
 
 class BoundingBox3D:
     def __init__(self, min: tuple[float, float, float], max: tuple[float, float, float]):
@@ -213,6 +180,73 @@ def make_grid(bbox: BoundingBox3D, points_per_axis: int) -> np.ndarray:
 def distance_to_sheet(grid: np.ndarray, sheet: np.ndarray) -> np.ndarray:
     raise NotImplementedError()
 
+
+from math import comb, pow
+def bernstein(index: int, degree: int, t: float) -> float:
+    return comb(degree, index) * pow(t, index) * pow(1-t,degree - index)
+
+def bezier(control_points: np.ndarray, p: np.ndarray) -> float:
+    assert p.shape[-1] == 2
+    assert len(p.shape) == 3 # (H,W,2)
+    n, m = control_points.shape
+    u = p[..., 0]
+    v = p[..., 1]
+    
+    B_u = np.array([bernstein_vectorized(i, n - 1, u) for i in range(n)])
+    B_v = np.array([bernstein_vectorized(j, m - 1, v) for j in range(m)])
+    
+    B_uv = np.einsum('ijk, ljk -> iljk', B_u, B_v)
+    zs = np.einsum('ij, ijkl -> kl',control_points, B_uv)
+    return zs[..., None] # (H, W, 1)
+
+def plane_pointcloud(bounding_box: BoundingBox2D, grid_density: int = 10):
+    xs = np.linspace(bounding_box.min[0], bounding_box.max[0], grid_density)
+    ys = np.linspace(bounding_box.min[1], bounding_box.max[1], grid_density)
+    X, Y = np.meshgrid(xs, ys)
+    plane_grid = np.stack((X.T, Y.T), axis=-1)
+    return plane_grid
+
+def _test_bernstein_visual():
+    xs = np.linspace(0,1,100)
+    for i in range(5):
+        ys = [bernstein(i, 4 ,x) for x in xs]
+        plt.plot(xs, ys)
+
+    plt.show()
+
+def visualize_pointcloud(points: np.ndarray):
+    assert points.shape[-1] == 3, "inner dimension of points array must be 3"
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    xs = points.reshape(-1, 3)[..., 0]
+    ys = points.reshape(-1, 3)[..., 1]
+    zs = points.reshape(-1, 3)[..., 2]
+
+    ax.scatter(xs, ys, zs, c='b', marker='o')
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+
+    plt.show()
+
+def _test_bezier_visual():
+    n = 3
+    m = 5
+    control_points = np.random.rand(n+1,m+1)
+    bbox = BoundingBox2D((0,0), (1,1))
+    pc = plane_pointcloud(bbox)
+    z_coords = bezier(control_points, pc)
+    coords_3d = np.concatenate((pc, z_coords), axis=-1).reshape(-1, 3)
+
+    visualize_pointcloud(coords_3d)
+    
+
+
+## now bezier is
+# Q(u, v) = sum_over(i,j) B_i,j J_n,i(u) K_m,j(v)
 
 """
 How to generalise to multiple planes such that they don't intersect?
