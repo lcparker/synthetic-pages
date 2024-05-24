@@ -1,6 +1,4 @@
 """
-The plan:
-
 I want to create a program that generates a volume with N synthetic pages.
 It should output the data and the ground truth labels.
 
@@ -8,15 +6,8 @@ The pages should be non-overlapping.
 
 They should be in 3D.
 
-
 WHAT TO DO
-* get bezier surface with no transform working to deform a single point
-* visualise a point cloud with deformations applied
-* make it a mesh and deform that
 * turn it into a volume based on within distance of page and turn that into voxel array
-
-
-How do you generate N structured pages? Should be able to do something with splines?
 
 The question is
 * how do you generate realistic crumples for pages st they're not all just the exact same?
@@ -24,7 +15,7 @@ The question is
 
 My thoughts
 * generate N straight pages (planes) oriented in a random direction in the scene
-* deform them using control points (bezier curves or something like FFD)
+* distort with control points
 * apply random local distortions/variations as like a masked kernel 
 (so there's a heatmap over the whole volume that you scale the kernel with,
 identity most places except where there are local variations)
@@ -238,6 +229,72 @@ def visualize_pointcloud(points: np.ndarray):
 
     plt.show()
 
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
+class Mesh:
+    def __init__(self, points, triangles):
+        assert points.shape[-1] == 3
+        assert len(points.shape) == 2
+        assert triangles.shape[-1] == 3
+        assert len(triangles.shape) == 2
+
+        self.points = points
+        self.triangles = triangles
+
+    def show(self):
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        for triangle in self.triangles:
+            closed_triangle = np.append(triangle, triangle[0])  # To close the triangle
+            ax.plot(self.points[closed_triangle, 0], 
+                    self.points[closed_triangle, 1], 
+                    self.points[closed_triangle, 2], 'k-')
+
+        ax.plot(self.points[..., 0], self.points[..., 1], self.points[..., 2], 'o', markersize=5, color='red')
+
+        ax.set_title('3D Mesh with Delaunay Triangulation')
+        ax.set_xlabel('X-axis')
+        ax.set_ylabel('Y-axis')
+        plt.show()
+
+    def scene_with_mesh_in_it(self) -> tuple[Figure, Axes]:
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        for triangle in self.triangles:
+            closed_triangle = np.append(triangle, triangle[0])  # To close the triangle
+            ax.plot(self.points[closed_triangle, 0], 
+                    self.points[closed_triangle, 1], 
+                    self.points[closed_triangle, 2], 'k-')
+
+        ax.plot(self.points[..., 0], self.points[..., 1], self.points[..., 2], 'o', markersize=5, color='red')
+
+        ax.set_title('3D Mesh with Delaunay Triangulation')
+        ax.set_xlabel('X-axis')
+        ax.set_ylabel('Y-axis')
+        return fig, ax
+
+def bezier_surface(control_points):
+    n = control_points.shape[0] - 1
+    m = control_points.shape[1] - 1
+    bbox = BoundingBox2D((0,0), (1,1)) # generate unit grid
+    pc = plane_pointcloud(bbox)
+    z_coords = bezier(control_points, pc)
+    coords_3d = np.concatenate((pc, z_coords), axis=-1).reshape(-1, 3)
+    pc_3d = coords_3d.reshape(-1, 3)
+    mesh = triangulate_points(pc_3d)
+    return mesh
+
+
+def control_points_3d(control_points, bounding_box: BoundingBox2D):
+    xs = np.linspace(bounding_box.min[0], bounding_box.max[0], control_points.shape[0])
+    ys = np.linspace(bounding_box.min[1], bounding_box.max[1], control_points.shape[1])
+
+    X, Y = np.meshgrid(xs, ys)
+    control_points_3d = np.stack((X.T, Y.T, control_points), axis=-1)
+    return control_points_3d.reshape(-1, 3)
+
 def _test_bezier_visual():
     n = 3
     m = 5
@@ -246,10 +303,21 @@ def _test_bezier_visual():
     pc = plane_pointcloud(bbox)
     z_coords = bezier(control_points, pc)
     coords_3d = np.concatenate((pc, z_coords), axis=-1).reshape(-1, 3)
+    pc_3d = coords_3d.reshape(-1, 3)
+    mesh = triangulate_points(pc_3d)
+    cp3d = control_points_3d(control_points, bbox)
+    fig, ax = mesh.scene_with_mesh_in_it()
+    ax.scatter(cp3d[..., 0], cp3d[..., 1], cp3d[..., 2])
+    plt.show()
+    # mesh.show()
 
-    visualize_pointcloud(coords_3d)
-    
+    # visualize_pointcloud(coords_3d)
 
+def triangulate_points(pointcloud: np.ndarray):
+    assert pointcloud.shape[-1] == 3
+    from scipy.spatial import Delaunay
+    triangles = Delaunay(pointcloud[..., :2].reshape(-1, 2)).simplices
+    return Mesh(pointcloud, triangles)
 
 
 """
