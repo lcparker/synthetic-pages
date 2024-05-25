@@ -35,14 +35,6 @@ class BoundingBox2D:
         self.min = min
         self.max = max
 
-class Plane:
-    origin = np.array([0,0,0])
-    normal = np.array([0,0,1])
-
-    def __init__(self, origin, normal):
-        self.origin = origin
-        self.normal = normal
-
 class HomogeneousTransform:
     def __init__(self, matrix=None):
         if matrix is None:
@@ -155,11 +147,37 @@ def bezier(control_points: np.ndarray, p: np.ndarray) -> np.ndarray:
     zs = np.einsum('ij, ijkl -> kl',control_points, B_uv)
     return zs[..., None] # (H, W, 1)
 
-def plane_pointcloud(bounding_box: BoundingBox2D, grid_density: int = 10):
+def bezier_3d(control_points: np.ndarray, p: np.ndarray) -> np.ndarray:
+    """
+    Computes Q(u, v) = sum_over(i,j,k) C_i,j,k B_n,i(u) B_m,j(v)
+
+    Where C_ijk is the ijkth control point, a point in 3d space.
+    """ 
+    assert p.shape[-1] == 3
+    assert len(p.shape) == 2 # (N,3)
+    assert control_points.shape[-1] == 3
+    assert len(control_points.shape) == 3
+    n, m = control_points.shape[:-1]
+    u = p[..., 0] # (N,)
+    v = p[..., 1] # (N,)
+    
+    B_u = np.array([bernstein(i, n - 1, u) for i in range(n)]) # (n,N)
+    B_v = np.array([bernstein(j, m - 1, v) for j in range(m)]) # (m,N)
+    
+    B_uvw = np.einsum('iN, jN -> Nij', B_u, B_v)
+    pts = np.einsum('ija, Nij -> Na',control_points, B_uvw)
+    return pts # (N, 3)
+
+def plane_pointcloud_3d_coords(bounding_box: BoundingBox2D, grid_density: int = 10):
+    """
+    turn bounding box into z=0 grid of bounds uniformly spaced inside
+    bounding_box, with grid_density points per axis
+    """
     xs = np.linspace(bounding_box.min[0], bounding_box.max[0], grid_density)
     ys = np.linspace(bounding_box.min[1], bounding_box.max[1], grid_density)
     X, Y = np.meshgrid(xs, ys)
-    plane_grid = np.stack((X.T, Y.T), axis=-1)
+    Z = np.zeros(X.shape)
+    plane_grid = np.stack((X.T, Y.T, Z.T), axis=-1)
     return plane_grid
 
 def _test_bernstein_visual():
@@ -167,24 +185,6 @@ def _test_bernstein_visual():
     for i in range(5):
         ys = [bernstein(i, 4 ,x) for x in xs]
         plt.plot(xs, ys)
-
-    plt.show()
-
-def visualize_pointcloud(points: np.ndarray):
-    assert points.shape[-1] == 3, "inner dimension of points array must be 3"
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    xs = points.reshape(-1, 3)[..., 0]
-    ys = points.reshape(-1, 3)[..., 1]
-    zs = points.reshape(-1, 3)[..., 2]
-
-    ax.scatter(xs, ys, zs, c='b', marker='o')
-
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
 
     plt.show()
 
@@ -215,9 +215,9 @@ class Mesh:
         ax.set_ylabel('Y-axis')
         plt.show()
 
-    def scene_with_mesh_in_it(self) -> tuple[Figure, Axes]:
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(111, projection='3d')
+    def scene_with_mesh_in_it(self, fig=None, ax=None) -> tuple[Figure, Axes]:
+        fig = plt.figure(figsize=(10, 8)) if fig is None else fig
+        ax = fig.add_subplot(111, projection='3d') if ax is None else ax
 
         for triangle in self.triangles:
             closed_triangle = np.append(triangle, triangle[0])  # To close the triangle
@@ -249,42 +249,13 @@ class Mesh:
 
         plt.show()
 
-def bezier_surface(control_points):
-    n = control_points.shape[0] - 1
-    m = control_points.shape[1] - 1
-    bbox = BoundingBox2D((0,0), (1,1)) # generate unit grid
-    pc = plane_pointcloud(bbox)
-    z_coords = bezier(control_points, pc)
-    coords_3d = np.concatenate((pc, z_coords), axis=-1).reshape(-1, 3)
-    pc_3d = coords_3d.reshape(-1, 3)
-    mesh = triangulate_points(pc_3d)
-    return mesh
-
-def control_points_3d(control_points, bounding_box: BoundingBox2D):
-    xs = np.linspace(bounding_box.min[0], bounding_box.max[0], control_points.shape[0])
-    ys = np.linspace(bounding_box.min[1], bounding_box.max[1], control_points.shape[1])
-
+def make_control_points_3d(nx: int, ny: int, bounding_box: BoundingBox2D):
+    xs = np.linspace(bounding_box.min[0], bounding_box.max[0], nx)
+    ys = np.linspace(bounding_box.min[1], bounding_box.max[1], ny)
     X, Y = np.meshgrid(xs, ys)
-    control_points_3d = np.stack((X.T, Y.T, control_points), axis=-1)
-    return control_points_3d.reshape(-1, 3)
-
-def _test_bezier_visual():
-    n = 3
-    m = 5
-    control_points = np.random.rand(n+1,m+1)
-    bbox = BoundingBox2D((0,0), (1,1))
-    pc = plane_pointcloud(bbox)
-    z_coords = bezier(control_points, pc)
-    coords_3d = np.concatenate((pc, z_coords), axis=-1).reshape(-1, 3)
-    pc_3d = coords_3d.reshape(-1, 3)
-    mesh = triangulate_points(pc_3d)
-    cp3d = control_points_3d(control_points, bbox)
-    fig, ax = mesh.scene_with_mesh_in_it()
-    ax.scatter(cp3d[..., 0], cp3d[..., 1], cp3d[..., 2])
-    plt.show()
-    # mesh.show()
-
-    # visualize_pointcloud(coords_3d)
+    Z = np.zeros(X.shape)
+    control_points_3d = np.stack((X.T, Y.T, Z.T), axis=-1)
+    return control_points_3d
 
 def triangulate_points(pointcloud: np.ndarray):
     assert pointcloud.shape[-1] == 3
@@ -313,49 +284,6 @@ def compute_signed_distances(
     sdf = distances.reshape(grid.shape[:-1])
     return sdf
 
-from matplotlib.widgets import Slider
-def visualize_mask_with_slider(mask):
-    # Create the initial figure and axes
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    plt.subplots_adjust(left=0.1, bottom=0.25)
-
-    # Initial slice index
-    initial_slice = mask.shape[0] // 2
-
-    # Display initial slices
-    slices = [mask[initial_slice, :, :],  # XY plane
-              mask[:, initial_slice, :],  # XZ plane
-              mask[:, :, initial_slice]]  # YZ plane
-
-    images = []
-    for i, ax in enumerate(axes):
-        img = ax.imshow(slices[i], cmap='gray')
-        ax.set_title(['XY Plane', 'XZ Plane', 'YZ Plane'][i])
-        ax.axis('off')
-        images.append(img)
-
-    # Create axes for the slider
-    axcolor = 'lightgoldenrodyellow'
-    axslice = plt.axes([0.1, 0.1, 0.8, 0.03], facecolor=axcolor)
-
-    # Define the slider
-    slice_slider = Slider(axslice, 'Slice', 0, mask.shape[0]-1, valinit=initial_slice, valfmt='%0.0f')
-
-    # Update function to change the slice displayed
-    def update(val):
-        slice_idx = int(slice_slider.val)
-        new_slices = [mask[slice_idx, :, :],  # XY plane
-                      mask[:, slice_idx, :],  # XZ plane
-                      mask[:, :, slice_idx]]  # YZ plane
-        for img, new_slice in zip(images, new_slices):
-            img.set_data(new_slice)
-        fig.canvas.draw_idle()
-
-    # Attach the update function to the slider
-    slice_slider.on_changed(update)
-
-    plt.show()
-
 def create_mask(sdf, distance_threshold):
     mask = sdf <= distance_threshold
     return mask.astype(int)
@@ -379,21 +307,46 @@ def mesh_to_3d_page(mesh: Mesh, bbox: BoundingBox3D, distance=.05) -> np.ndarray
     mask = create_mask(sdf, .05)
     return mask
 
+def bezier_surface(
+        control_points, # (H,W,3)
+        bbox: BoundingBox2D,
+        ):
+    assert control_points.shape[-1] == 3
+    assert len(control_points.shape) == 3
 
-n = 3
-m = 5
-control_points = np.random.rand(n+1,m+1)
-mesh = bezier_surface(control_points)
-mesh.show()
+    pc = plane_pointcloud_3d_coords(bbox).reshape(-1, 3)
+    pc_3d = bezier_3d(control_points, pc)
+    mesh = triangulate_points(pc_3d)
+    return mesh
 
-bbox3d = BoundingBox3D((-.5,-.5,-.5), (1.5,1.5,1.5))
-mask = mesh_to_3d_page(mesh, bbox3d)
+def _test_bezier_visual(control_points, bbox: BoundingBox2D):
+    mesh = bezier_surface(control_points, bbox)
+    _, ax = mesh.scene_with_mesh_in_it()
+    ax.scatter(control_points[..., 0], control_points[..., 1], control_points[..., 2])
+    plt.show()
+
+# bbox3d = BoundingBox3D((-.5,-.5,-.5), (1.5,1.5,1.5))
+# mask = mesh_to_3d_page(mesh, bbox3d)
 
 # save_mask_as_nifti(mask, 'mask.nii')
 # mask_mesh = mask_to_mesh(mask)
 # mask_mesh.show()
-# visualize_mask_with_slider(mask)
 
+### EXAMPLE CODE ### 
+n = 4
+m = 6
+
+# generate control points in unit grid
+bbox = BoundingBox2D((0,0), (1,1)) 
+control_points_3d = make_control_points_3d(n, m, bbox)
+
+control_points_3d[1:,:,0] +=1
+control_points_3d[2:,:,0] +=1
+control_points_3d[:,-1,2] += 3
+control_points_3d[2,2,2] = -4
+control_points_3d[2,1,2] = -3
+
+_test_bezier_visual(control_points_3d, bbox)
 
 """
 How to generalise to multiple planes such that they don't intersect?
