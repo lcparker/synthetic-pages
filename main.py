@@ -319,6 +319,104 @@ def triangulate_points(pointcloud: np.ndarray):
     triangles = Delaunay(pointcloud[..., :2].reshape(-1, 2)).simplices
     return Mesh(pointcloud, triangles)
 
+### MAKING THE VOLUME
+
+def make_grid(bbox: BoundingBox3D, points_per_axis: int):
+    xs = np.linspace(bbox.min[0], bbox.max[0], points_per_axis)
+    ys = np.linspace(bbox.min[1], bbox.max[1], points_per_axis)
+    zs = np.linspace(bbox.min[2], bbox.max[2], points_per_axis)
+    X, Y, Z = np.meshgrid(xs, ys, zs, indexing='ij')
+    grid = np.stack((X, Y, Z), axis=-1)
+    assert grid.shape[-1] == 3
+    assert len(grid.shape) == 4
+    return grid # (H,W,D,3)
+
+def compute_signed_distances(
+        grid: np.ndarray,  # (H,W,D,3)
+        mesh: Mesh) -> np.ndarray:
+    from scipy.spatial import KDTree
+    tree = KDTree(mesh.points)
+    distances, _ = tree.query(grid.reshape(-1, 3))
+    sdf = distances.reshape(grid.shape[:-1])
+    return sdf
+
+from matplotlib.widgets import Slider
+def visualize_mask_with_slider(mask):
+    # Create the initial figure and axes
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    plt.subplots_adjust(left=0.1, bottom=0.25)
+
+    # Initial slice index
+    initial_slice = mask.shape[0] // 2
+
+    # Display initial slices
+    slices = [mask[initial_slice, :, :],  # XY plane
+              mask[:, initial_slice, :],  # XZ plane
+              mask[:, :, initial_slice]]  # YZ plane
+
+    images = []
+    for i, ax in enumerate(axes):
+        img = ax.imshow(slices[i], cmap='gray')
+        ax.set_title(['XY Plane', 'XZ Plane', 'YZ Plane'][i])
+        ax.axis('off')
+        images.append(img)
+
+    # Create axes for the slider
+    axcolor = 'lightgoldenrodyellow'
+    axslice = plt.axes([0.1, 0.1, 0.8, 0.03], facecolor=axcolor)
+
+    # Define the slider
+    slice_slider = Slider(axslice, 'Slice', 0, mask.shape[0]-1, valinit=initial_slice, valfmt='%0.0f')
+
+    # Update function to change the slice displayed
+    def update(val):
+        slice_idx = int(slice_slider.val)
+        new_slices = [mask[slice_idx, :, :],  # XY plane
+                      mask[:, slice_idx, :],  # XZ plane
+                      mask[:, :, slice_idx]]  # YZ plane
+        for img, new_slice in zip(images, new_slices):
+            img.set_data(new_slice)
+        fig.canvas.draw_idle()
+
+    # Attach the update function to the slider
+    slice_slider.on_changed(update)
+
+    plt.show()
+
+def create_mask(sdf, distance_threshold):
+    mask = sdf <= distance_threshold
+    return mask.astype(int)
+
+
+import nibabel as nib
+def save_mask_as_nifti(mask, filename):
+    # Create a NIfTI image
+    nifti_img = nib.Nifti1Image(mask.astype(np.int16), affine=np.eye(4))
+    
+    # Save the image to file
+    nib.save(nifti_img, filename)
+
+# Save the mask
+save_mask_as_nifti(mask, '3d_mask.nii')
+
+
+n = 3
+m = 5
+control_points = np.random.rand(n+1,m+1)
+bbox = BoundingBox2D((0,0), (1,1))
+pc = plane_pointcloud(bbox)
+z_coords = bezier(control_points, pc)
+coords_3d = np.concatenate((pc, z_coords), axis=-1).reshape(-1, 3)
+pc_3d = coords_3d.reshape(-1, 3)
+mesh = triangulate_points(pc_3d)
+
+bbox3d = BoundingBox3D((0,0,0), (1,1,1))
+grid = make_grid(bbox3d, 100)
+sdf = compute_signed_distances(grid, mesh)
+mask = create_mask(sdf, .11)
+save_mask_as_nifti(mask, 'mask.nii')
+# visualize_mask_with_slider(mask)
+
 
 """
 How to generalise to multiple planes such that they don't intersect?
