@@ -4,7 +4,6 @@ Generate synthetic pages using bezier surfaces
 The pages should be non-overlapping. 
 
 TODO
-* make the control points 3d deformable
 * make transformations to place it in 3d in the scene
 * how do you generate realistic crumples for pages st they're not all just the exact same?
   and don't intersect?
