@@ -1,17 +1,16 @@
 """
-I want to create a program that generates a volume with N synthetic pages.
-It should output the data and the ground truth labels.
+Generate synthetic pages using bezier surfaces
 
 The pages should be non-overlapping. 
 
-They should be in 3D.
-
-WHAT TO DO
-* turn it into a volume based on within distance of page and turn that into voxel array
-
-The question is
+TODO
+* make the control points 3d deformable
+* make transformations to place it in 3d in the scene
 * how do you generate realistic crumples for pages st they're not all just the exact same?
   and don't intersect?
+
+LATER
+* generate synthetic N-page blocks en masse for training
 
 My thoughts
 * generate N straight pages (planes) oriented in a random direction in the scene
@@ -21,43 +20,21 @@ My thoughts
 identity most places except where there are local variations)
 """
 
+from math import comb
 import numpy as np
 from scipy.interpolate import make_interp_spline
 from scipy.interpolate import BSpline
 import matplotlib.pyplot as plt
-
-Spline2D = tuple[BSpline, BSpline]
-
-def make_spline():
-    xs = np.linspace(0,1,10)
-    control_points = np.random.rand(len(xs))* 4 + 5
-    spline = make_interp_spline(xs, control_points) # cubic b-spline fit to control points
-    return spline
-
-def random_control_points(seq):
-    return np.random.rand(len(seq)) * 20
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
 
 Point2D = tuple[float, float]
+
 class BoundingBox2D:
     def __init__(self, min: Point2D, max: Point2D):
         self.min = min
         self.max = max
 
-# make 2d spline
-def make_2d_spline(bounding_box: BoundingBox2D) -> Spline2D:
-    xs = np.linspace(bounding_box.min[0],bounding_box.max[0],10)
-    x_cpts = random_control_points(xs)
-    x_spline = make_interp_spline(xs, x_cpts)
-
-    ys = np.linspace(bounding_box.min[1],bounding_box.max[1],10)
-    y_cpts = random_control_points(ys)
-    y_spline = make_interp_spline(ys, y_cpts)
-
-
-    raise Exception("This code is broken! Deformations need to happen along z axis, look deeper")
-    return (x_spline, y_spline)
-
-# create plane object
 class Plane:
     origin = np.array([0,0,0])
     normal = np.array([0,0,1])
@@ -65,8 +42,6 @@ class Plane:
     def __init__(self, origin, normal):
         self.origin = origin
         self.normal = normal
-
-#################################
 
 class HomogeneousTransform:
     def __init__(self, matrix=None):
@@ -89,6 +64,7 @@ class HomogeneousTransform:
         
         return transformed_points
 
+###### tests for homogeneous transforms ######
 
 import unittest
 from numpy.testing import assert_array_almost_equal
@@ -149,7 +125,6 @@ def run_transform_tests():
 
 run_transform_tests()
 
-
 ###############################
 
 class BoundingBox3D:
@@ -157,26 +132,10 @@ class BoundingBox3D:
         self.min = min
         self.max = max
 
-def make_grid(bbox: BoundingBox3D, points_per_axis: int) -> np.ndarray:
-    xs = np.linspace(bbox.min[0], bbox.max[0], points_per_axis)
-    ys = np.linspace(bbox.min[1], bbox.max[1], points_per_axis)
-    zs = np.linspace(bbox.min[2], bbox.max[2], points_per_axis)
-
-    X,Y,Z = np.meshgrid(xs, ys, zs)
-
-    grid = np.stack((X.T,Y.T,Z.T), axis=-1)
-    return grid
-
-# NOW we want to compute the distance from the spline to the grid to get the
-def distance_to_sheet(grid: np.ndarray, sheet: np.ndarray) -> np.ndarray:
-    raise NotImplementedError()
-
-
-from math import comb
 def bernstein(index: int, degree: int, t: np.ndarray) -> np.ndarray:
     return comb(degree, index) * np.power(t, index) * np.power(1 - t, degree - index)
 
-def bezier(control_points: np.ndarray, p: np.ndarray) -> float:
+def bezier(control_points: np.ndarray, p: np.ndarray) -> np.ndarray:
     """
     Computes Q(u, v) = sum_over(i,j) B_i,j J_n,i(u) K_m,j(v)
 
@@ -229,8 +188,6 @@ def visualize_pointcloud(points: np.ndarray):
 
     plt.show()
 
-from matplotlib.figure import Figure
-from matplotlib.axes import Axes
 class Mesh:
     def __init__(self, points, triangles):
         assert points.shape[-1] == 3
@@ -241,7 +198,7 @@ class Mesh:
         self.points = points
         self.triangles = triangles
 
-    def show(self):
+    def show_wireframe(self):
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection='3d')
 
@@ -275,6 +232,23 @@ class Mesh:
         ax.set_ylabel('Y-axis')
         return fig, ax
 
+    def show(self):
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        x = self.points[:, 0]
+        y = self.points[:, 1]
+        z = self.points[:, 2]
+
+        ax.plot_trisurf(x, y, mesh.triangles, z, cmap='viridis', lw=1, edgecolor='none')
+
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_title('3D Mesh with Filled Surface')
+
+        plt.show()
+
 def bezier_surface(control_points):
     n = control_points.shape[0] - 1
     m = control_points.shape[1] - 1
@@ -285,7 +259,6 @@ def bezier_surface(control_points):
     pc_3d = coords_3d.reshape(-1, 3)
     mesh = triangulate_points(pc_3d)
     return mesh
-
 
 def control_points_3d(control_points, bounding_box: BoundingBox2D):
     xs = np.linspace(bounding_box.min[0], bounding_box.max[0], control_points.shape[0])
@@ -387,7 +360,6 @@ def create_mask(sdf, distance_threshold):
     mask = sdf <= distance_threshold
     return mask.astype(int)
 
-
 import nibabel as nib
 def save_mask_as_nifti(mask, filename):
     # Create a NIfTI image
@@ -401,42 +373,25 @@ def mask_to_mesh(mask) -> Mesh:
     verts, faces, _, _ = marching_cubes(mask, level=0)
     return Mesh(verts, faces)
 
-def plot_mesh(mesh: Mesh):
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
+def mesh_to_3d_page(mesh: Mesh, bbox: BoundingBox3D, distance=.05) -> np.ndarray:
+    grid = make_grid(bbox3d, 100)
+    sdf = compute_signed_distances(grid, mesh)
+    mask = create_mask(sdf, .05)
+    return mask
 
-    # Extract the individual vertices
-    x = mesh.points[:, 0]
-    y = mesh.points[:, 1]
-    z = mesh.points[:, 2]
-
-    # Create the triangular surface plot
-    ax.plot_trisurf(x, y, mesh.triangles, z, cmap='viridis', lw=1, edgecolor='none')
-
-    ax.set_xlabel('X-axis')
-    ax.set_ylabel('Y-axis')
-    ax.set_zlabel('Z-axis')
-    ax.set_title('3D Mesh with Filled Surface')
-
-    plt.show()
 
 n = 3
 m = 5
 control_points = np.random.rand(n+1,m+1)
-bbox = BoundingBox2D((0,0), (1,1))
-pc = plane_pointcloud(bbox, 100)
-z_coords = bezier(control_points, pc)
-coords_3d = np.concatenate((pc, z_coords), axis=-1).reshape(-1, 3)
-pc_3d = coords_3d.reshape(-1, 3)
-mesh = triangulate_points(pc_3d)
+mesh = bezier_surface(control_points)
+mesh.show()
 
 bbox3d = BoundingBox3D((-.5,-.5,-.5), (1.5,1.5,1.5))
-grid = make_grid(bbox3d, 100)
-sdf = compute_signed_distances(grid, mesh)
-mask = create_mask(sdf, .05)
-save_mask_as_nifti(mask, 'mask.nii')
-mask_mesh = mask_to_mesh(mask)
-plot_mesh(mask_mesh)
+mask = mesh_to_3d_page(mesh, bbox3d)
+
+# save_mask_as_nifti(mask, 'mask.nii')
+# mask_mesh = mask_to_mesh(mask)
+# mask_mesh.show()
 # visualize_mask_with_slider(mask)
 
 
