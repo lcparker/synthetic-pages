@@ -26,6 +26,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
+from scipy.spatial.transform import Rotation
 
 Point2D = tuple[float, float]
 
@@ -336,7 +337,6 @@ def run_transform_tests():
 run_transform_tests()
 
 ###############################
-from scipy.spatial.transform import Rotation
 def generate_random_transform(bbox: BoundingBox3D) -> HomogeneousTransform:
     # Generate random rotation
     rotation = Rotation.random().as_matrix()
@@ -346,12 +346,12 @@ def generate_random_transform(bbox: BoundingBox3D) -> HomogeneousTransform:
     scale_matrix = np.diag(np.append(scale_factors, 1))
     
     # Generate random translation that keeps the object within the bounding box
-    bbox_size = np.linalg.norm(np.array(bbox.max)- np.array(bbox.min))
-    translation = np.random.uniform(bbox.min, bbox.max - bbox_size / 2)
+    # bbox_size = np.linalg.norm(np.array(bbox.max)- np.array(bbox.min))
+    # translation = np.random.uniform(bbox.min, bbox.max)
     
     # Create translation matrix
     translation_matrix = np.eye(4)
-    translation_matrix[:3, 3] = translation
+    # translation_matrix[:3, 3] = translation
     
     # Combine rotation, scaling, and translation into a single transformation matrix
     transform_matrix = translation_matrix @ scale_matrix
@@ -365,6 +365,54 @@ def _test_transform_page(control_points, bbox: BoundingBox2D, bbox_3d: BoundingB
     mesh = tf.apply(mesh)
 
     _, ax = mesh.scene_with_mesh_in_it()
+    plt.show()
+
+from mpl_toolkits.mplot3d.art3d import Line3DCollection
+def plot_bounding_box(ax, bbox: BoundingBox3D):
+    """Plot a 3D bounding box."""
+    # Define the vertices of the bounding box
+    vertices = np.array([
+        [bbox.min[0], bbox.min[1], bbox.min[2]],
+        [bbox.max[0], bbox.min[1], bbox.min[2]],
+        [bbox.max[0], bbox.max[1], bbox.min[2]],
+        [bbox.min[0], bbox.max[1], bbox.min[2]],
+        [bbox.min[0], bbox.min[1], bbox.max[2]],
+        [bbox.max[0], bbox.min[1], bbox.max[2]],
+        [bbox.max[0], bbox.max[1], bbox.max[2]],
+        [bbox.min[0], bbox.max[1], bbox.max[2]]
+    ])
+    
+    # Define the edges of the bounding box
+    edges = [
+        [vertices[0], vertices[1]],
+        [vertices[1], vertices[2]],
+        [vertices[2], vertices[3]],
+        [vertices[3], vertices[0]],
+        [vertices[4], vertices[5]],
+        [vertices[5], vertices[6]],
+        [vertices[6], vertices[7]],
+        [vertices[7], vertices[4]],
+        [vertices[0], vertices[4]],
+        [vertices[1], vertices[5]],
+        [vertices[2], vertices[6]],
+        [vertices[3], vertices[7]]
+    ]
+    
+    # Create a 3D line collection from the edges
+    edge_collection = Line3DCollection(edges, colors='r', linewidths=2)
+    
+    # Add the edge collection to the plot
+    ax.add_collection3d(edge_collection)
+
+    return ax
+
+def _test_bounding_box_vis(control_points, bbox: BoundingBox2D, bbox_3d: BoundingBox3D):
+    mesh = bezier_surface(control_points, bbox)
+    tf = generate_random_transform(bbox_3d)
+    mesh = tf.apply(mesh)
+
+    _, ax = mesh.scene_with_mesh_in_it()
+    ax = plot_bounding_box(ax, bbox_3d)
     plt.show()
 
 
@@ -381,6 +429,7 @@ m = 6
 
 # generate control points in unit grid
 bbox = BoundingBox2D((0,0), (1,1)) 
+volume_bbox = BoundingBox3D((-1,-1,-2), (1,1,2))
 control_points_3d = make_control_points_3d(n, m, bbox)
 
 control_points_3d[1:,:,0] +=1
@@ -389,9 +438,8 @@ control_points_3d[:,-1,2] += 3
 control_points_3d[2,2,2] = -4
 control_points_3d[2,1,2] = -3
 
-# _test_bezier_visual(control_points_3d, bbox)
-_test_transform_page(control_points_3d, bbox, BoundingBox3D((0,0,-2), (0,0,2)))
-
+#_test_transform_page(control_points_3d, bbox, volume_bbox)
+_test_bounding_box_vis(control_points_3d, bbox, volume_bbox)
 """
 How to generalise to multiple planes such that they don't intersect?
 * make spline global
