@@ -396,25 +396,47 @@ def save_mask_as_nifti(mask, filename):
     # Save the image to file
     nib.save(nifti_img, filename)
 
-# Save the mask
-save_mask_as_nifti(mask, '3d_mask.nii')
+def mask_to_mesh(mask) -> Mesh:
+    from skimage.measure import marching_cubes
+    verts, faces, _, _ = marching_cubes(mask, level=0)
+    return Mesh(verts, faces)
 
+def plot_mesh(mesh: Mesh):
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Extract the individual vertices
+    x = mesh.points[:, 0]
+    y = mesh.points[:, 1]
+    z = mesh.points[:, 2]
+
+    # Create the triangular surface plot
+    ax.plot_trisurf(x, y, mesh.triangles, z, cmap='viridis', lw=1, edgecolor='none')
+
+    ax.set_xlabel('X-axis')
+    ax.set_ylabel('Y-axis')
+    ax.set_zlabel('Z-axis')
+    ax.set_title('3D Mesh with Filled Surface')
+
+    plt.show()
 
 n = 3
 m = 5
 control_points = np.random.rand(n+1,m+1)
 bbox = BoundingBox2D((0,0), (1,1))
-pc = plane_pointcloud(bbox)
+pc = plane_pointcloud(bbox, 100)
 z_coords = bezier(control_points, pc)
 coords_3d = np.concatenate((pc, z_coords), axis=-1).reshape(-1, 3)
 pc_3d = coords_3d.reshape(-1, 3)
 mesh = triangulate_points(pc_3d)
 
-bbox3d = BoundingBox3D((0,0,0), (1,1,1))
+bbox3d = BoundingBox3D((-.5,-.5,-.5), (1.5,1.5,1.5))
 grid = make_grid(bbox3d, 100)
 sdf = compute_signed_distances(grid, mesh)
-mask = create_mask(sdf, .11)
+mask = create_mask(sdf, .05)
 save_mask_as_nifti(mask, 'mask.nii')
+mask_mesh = mask_to_mesh(mask)
+plot_mesh(mask_mesh)
 # visualize_mask_with_slider(mask)
 
 
