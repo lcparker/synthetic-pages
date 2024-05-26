@@ -34,7 +34,6 @@ class BoundingBox2D:
         self.min = min
         self.max = max
 
-
 class BoundingBox3D:
     def __init__(self, min: tuple[float, float, float], max: tuple[float, float, float]):
         self.min = min
@@ -446,6 +445,15 @@ def tesselate_pages(control_points, bbox_3d, num_pages, spacing):
     plt.show()
 
     return meshes
+
+
+"""
+SDFs for multiple pages:
+    * compute the sdfs for each mesh individually
+    * collate to (H,W,D,N) array, N being the number of pages
+    * reduce along N, outputting the index that is smallest or NoIndex if it's above the distance threshold
+    * that's the ground truth segmentation data
+"""
 
 # mask = mesh_to_3d_page(mesh, bbox3d)
 
