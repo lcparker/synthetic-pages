@@ -16,6 +16,7 @@ My thoughts
 * generate N straight pages (planes) oriented in a random direction in the scene
 * distort with control points
 * apply random local distortions/variations as like a masked kernel 
+* is it possible/feasible to generate the pages by hand manually adjusting the control points in 3d to deform the whole space, then getting the (u,v,w) coordinates of each point on the plane and deforming that
 (so there's a heatmap over the whole volume that you scale the kernel with,
 identity most places except where there are local variations)
 """
@@ -28,7 +29,6 @@ from matplotlib.axes import Axes
 from scipy.spatial.transform import Rotation
 
 Point2D = tuple[float, float]
-
 class BoundingBox2D:
     def __init__(self, min: Point2D, max: Point2D):
         self.min = min
@@ -147,20 +147,6 @@ class Mesh:
         ax.set_zlabel('Z')
         ax.set_title('3D Mesh with Filled Surface')
 
-        return fig, ax
-        ax = fig.add_subplot(111, projection='3d') if ax is None else ax
-
-        for triangle in self.triangles:
-            closed_triangle = np.append(triangle, triangle[0])  # To close the triangle
-            ax.plot(self.points[closed_triangle, 0], 
-                    self.points[closed_triangle, 1], 
-                    self.points[closed_triangle, 2], 'k-')
-
-        ax.plot(self.points[..., 0], self.points[..., 1], self.points[..., 2], 'o', markersize=5, color='red')
-
-        ax.set_title('3D Mesh with Delaunay Triangulation')
-        ax.set_xlabel('X-axis')
-        ax.set_ylabel('Y-axis')
         return fig, ax
 
     def show(self, fig=None, ax=None):
@@ -487,6 +473,4 @@ How to generalise to multiple planes such that they don't intersect?
 * make spline global -> won't work
   * you have to only displace control points along the axis that you tesselate I THINK
 * then apply local deformations as a kernel if necessary
-
-it's not good that you 
 """
