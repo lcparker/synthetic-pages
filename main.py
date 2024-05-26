@@ -6,8 +6,7 @@ The pages should be non-overlapping.
 TODO
 * how do you generate realistic crumples for pages st they're not all just the exact same?
   and don't intersect?
-* overlay the 3d bounding box of the volume on top of the generated page
-* generate a bunch of pages offset along the plane-frame z-axis
+    -> i think this is easy using randomly initialised gaussian heatmaps and taking some kernel and conving * the intesnsity to get the modified image (so it's a smooth transform)
 * work out how to get the sdf s.t. you can get N pages
 
 LATER
@@ -75,8 +74,8 @@ def bezier_3d(control_points: np.ndarray, p: np.ndarray) -> np.ndarray:
     assert control_points.shape[-1] == 3
     assert len(control_points.shape) == 3
     n, m = control_points.shape[:-1]
-    u = p[..., 0] # (N,)
-    v = p[..., 1] # (N,)
+    u = p[..., 0]
+    v = p[..., 1]
     
     B_u = np.array([bernstein(i, n - 1, u) for i in range(n)]) # (n,N)
     B_v = np.array([bernstein(j, m - 1, v) for j in range(m)]) # (m,N)
@@ -134,6 +133,21 @@ class Mesh:
 
     def scene_with_mesh_in_it(self, fig=None, ax=None) -> tuple[Figure, Axes]:
         fig = plt.figure(figsize=(10, 8)) if fig is None else fig
+        fig = plt.figure(figsize=(10, 8)) if fig is None else fig
+        ax = fig.add_subplot(111, projection='3d') if ax is None else ax
+
+        x = self.points[:, 0]
+        y = self.points[:, 1]
+        z = self.points[:, 2]
+
+        ax.plot_trisurf(x, y, mesh.triangles, z, cmap='viridis', lw=1, edgecolor='none')
+
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_title('3D Mesh with Filled Surface')
+
+        return fig, ax
         ax = fig.add_subplot(111, projection='3d') if ax is None else ax
 
         for triangle in self.triangles:
@@ -149,9 +163,9 @@ class Mesh:
         ax.set_ylabel('Y-axis')
         return fig, ax
 
-    def show(self):
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(111, projection='3d')
+    def show(self, fig=None, ax=None):
+        fig = plt.figure(figsize=(10, 8)) if fig is None else fig
+        ax = fig.add_subplot(111, projection='3d') if ax is None else ax
 
         x = self.points[:, 0]
         y = self.points[:, 1]
@@ -224,14 +238,17 @@ def mesh_to_3d_page(mesh: Mesh, bbox: BoundingBox3D, distance=.05) -> np.ndarray
     mask = create_mask(sdf, .05)
     return mask
 
+def unit_plane_3d():
+    unit_bbox = BoundingBox2D((0,0), (1,1))
+    return plane_pointcloud_3d_coords(unit_bbox).reshape(-1, 3)
+
 def bezier_surface(
         control_points, # (H,W,3)
-        bbox: BoundingBox2D,
-        ):
+        ) -> Mesh:
     assert control_points.shape[-1] == 3
     assert len(control_points.shape) == 3
 
-    pc = plane_pointcloud_3d_coords(bbox).reshape(-1, 3)
+    pc = unit_plane_3d()
     pc_3d = bezier_3d(control_points, pc)
     mesh = triangulate_points(pc_3d)
     return mesh
@@ -346,12 +363,12 @@ def generate_random_transform(bbox: BoundingBox3D) -> HomogeneousTransform:
     scale_matrix = np.diag(np.append(scale_factors, 1))
     
     # Generate random translation that keeps the object within the bounding box
-    # bbox_size = np.linalg.norm(np.array(bbox.max)- np.array(bbox.min))
     # translation = np.random.uniform(bbox.min, bbox.max)
     
     # Create translation matrix
     translation_matrix = np.eye(4)
     # translation_matrix[:3, 3] = translation
+    translation_matrix[:3, 3] = 0.5 * (np.array(bbox.min) + np.array(bbox.max))
     
     # Combine rotation, scaling, and translation into a single transformation matrix
     transform_matrix = translation_matrix @ scale_matrix
@@ -406,16 +423,43 @@ def plot_bounding_box(ax, bbox: BoundingBox3D):
 
     return ax
 
-def _test_bounding_box_vis(control_points, bbox: BoundingBox2D, bbox_3d: BoundingBox3D):
-    mesh = bezier_surface(control_points, bbox)
+def _test_bounding_box_vis(control_points, bbox_3d: BoundingBox3D):
+    mesh = bezier_surface(control_points)
+    # centre mesh at [0,0,0]
+    mesh_centre = mesh.points.mean(axis=0)
+    mesh.points = mesh.points - mesh_centre
     tf = generate_random_transform(bbox_3d)
+
     mesh = tf.apply(mesh)
 
     _, ax = mesh.scene_with_mesh_in_it()
     ax = plot_bounding_box(ax, bbox_3d)
     plt.show()
 
+def translation(x,y,z) -> HomogeneousTransform:
+    # Generate random translation that keeps the object within the bounding box
+    
+    # Create translation matrix
+    translation_matrix = np.eye(4)
+    translation_matrix[:3, 3] = np.array([x,y,z])
+    return HomogeneousTransform(translation_matrix)
 
+def tesselate_pages(control_points, bbox_3d, num_pages, spacing):
+    mesh = bezier_surface(control_points)
+    mesh_centre = mesh.points.mean(axis=0)
+    mesh = Mesh(mesh.points - mesh_centre, mesh.triangles)
+    zs = np.linspace(-spacing * num_pages/2, spacing * num_pages/2, num_pages)
+    meshes= [translation(0,0,z).apply(mesh) for z in zs]
+    tf = generate_random_transform(bbox_3d)
+    meshes= [tf.apply(mesh) for mesh in meshes]
+
+    fig, ax = meshes[0].scene_with_mesh_in_it()
+    for m in meshes[1:]:
+        fig, ax = m.scene_with_mesh_in_it(fig, ax)
+    ax = plot_bounding_box(ax, bbox_3d)
+    plt.show()
+
+    return meshes
 
 # mask = mesh_to_3d_page(mesh, bbox3d)
 
@@ -429,19 +473,20 @@ m = 6
 
 # generate control points in unit grid
 bbox = BoundingBox2D((0,0), (1,1)) 
-volume_bbox = BoundingBox3D((-1,-1,-2), (1,1,2))
+volume_bbox = BoundingBox3D((0,0,0), (1,1,1))
 control_points_3d = make_control_points_3d(n, m, bbox)
 
-control_points_3d[1:,:,0] +=1
-control_points_3d[2:,:,0] +=1
-control_points_3d[:,-1,2] += 3
-control_points_3d[2,2,2] = -4
-control_points_3d[2,1,2] = -3
+control_points_3d[..., 2] = np.random.rand(*control_points_3d.shape[:-1])
 
 #_test_transform_page(control_points_3d, bbox, volume_bbox)
-_test_bounding_box_vis(control_points_3d, bbox, volume_bbox)
+# _test_bounding_box_vis(control_points_3d, volume_bbox)
+tesselate_pages(control_points_3d, volume_bbox, 9, .1)
+
 """
 How to generalise to multiple planes such that they don't intersect?
-* make spline global
+* make spline global -> won't work
+  * you have to only displace control points along the axis that you tesselate I THINK
 * then apply local deformations as a kernel if necessary
+
+it's not good that you 
 """
