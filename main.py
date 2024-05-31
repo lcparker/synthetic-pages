@@ -7,7 +7,8 @@ TODO
 * how do you generate realistic crumples for pages st they're not all just the exact same?
   and don't intersect?
     -> i think this is easy using randomly initialised gaussian heatmaps and taking some kernel and conving * the intesnsity to get the modified image (so it's a smooth transform)
-* work out how to get the sdf s.t. you can get N pages
+* analyse perf, it's starting to get slow
+* maybe making the distance interpolate over triangle indices would speed things up?
 
 LATER
 * generate synthetic N-page blocks en masse for training
@@ -83,13 +84,13 @@ def bezier_3d(control_points: np.ndarray, p: np.ndarray) -> np.ndarray:
     pts = np.einsum('ija, Nij -> Na',control_points, B_uvw)
     return pts # (N, 3)
 
-def plane_pointcloud_3d_coords(bounding_box: BoundingBox2D, grid_density: int = 10):
+def plane_pointcloud_3d_coords(bounding_box: BoundingBox2D, num_points_per_axis: int = 10):
     """
     turn bounding box into z=0 grid of bounds uniformly spaced inside
     bounding_box, with grid_density points per axis
     """
-    xs = np.linspace(bounding_box.min[0], bounding_box.max[0], grid_density)
-    ys = np.linspace(bounding_box.min[1], bounding_box.max[1], grid_density)
+    xs = np.linspace(bounding_box.min[0], bounding_box.max[0], num_points_per_axis)
+    ys = np.linspace(bounding_box.min[1], bounding_box.max[1], num_points_per_axis)
     X, Y = np.meshgrid(xs, ys)
     Z = np.zeros(X.shape)
     plane_grid = np.stack((X.T, Y.T, Z.T), axis=-1)
@@ -132,14 +133,13 @@ class Mesh:
 
     def scene_with_mesh_in_it(self, fig=None, ax=None) -> tuple[Figure, Axes]:
         fig = plt.figure(figsize=(10, 8)) if fig is None else fig
-        fig = plt.figure(figsize=(10, 8)) if fig is None else fig
         ax = fig.add_subplot(111, projection='3d') if ax is None else ax
 
         x = self.points[:, 0]
         y = self.points[:, 1]
         z = self.points[:, 2]
 
-        ax.plot_trisurf(x, y, mesh.triangles, z, cmap='viridis', lw=1, edgecolor='none')
+        ax.plot_trisurf(x, y, self.triangles, z, cmap='viridis', lw=1, edgecolor='none')
 
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
@@ -156,7 +156,7 @@ class Mesh:
         y = self.points[:, 1]
         z = self.points[:, 2]
 
-        ax.plot_trisurf(x, y, mesh.triangles, z, cmap='viridis', lw=1, edgecolor='none')
+        ax.plot_trisurf(x, y, self.triangles, z, cmap='viridis', lw=1, edgecolor='none')
 
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
@@ -223,17 +223,18 @@ def mesh_to_3d_page(mesh: Mesh, bbox: BoundingBox3D, distance=.05) -> np.ndarray
     mask = create_mask(sdf, .05)
     return mask
 
-def unit_plane_3d():
+def unit_plane_3d(num_points_per_axis):
     unit_bbox = BoundingBox2D((0,0), (1,1))
-    return plane_pointcloud_3d_coords(unit_bbox).reshape(-1, 3)
+    return plane_pointcloud_3d_coords(unit_bbox, num_points_per_axis).reshape(-1, 3)
 
 def bezier_surface(
         control_points, # (H,W,3)
+        num_points_per_axis: int
         ) -> Mesh:
     assert control_points.shape[-1] == 3
     assert len(control_points.shape) == 3
 
-    pc = unit_plane_3d()
+    pc = unit_plane_3d(num_points_per_axis)
     pc_3d = bezier_3d(control_points, pc)
     mesh = triangulate_points(pc_3d)
     return mesh
@@ -429,22 +430,16 @@ def translation(x,y,z) -> HomogeneousTransform:
     translation_matrix[:3, 3] = np.array([x,y,z])
     return HomogeneousTransform(translation_matrix)
 
-def tesselate_pages(control_points, bbox_3d, num_pages, spacing):
-    mesh = bezier_surface(control_points)
+def tesselate_pages(control_points, bbox_3d, num_pages, spacing) -> list[Mesh]:
+    mesh = bezier_surface(control_points, num_points_per_axis = 50)
     mesh_centre = mesh.points.mean(axis=0)
     mesh = Mesh(mesh.points - mesh_centre, mesh.triangles)
     zs = np.linspace(-spacing * num_pages/2, spacing * num_pages/2, num_pages)
     meshes= [translation(0,0,z).apply(mesh) for z in zs]
     tf = generate_random_transform(bbox_3d)
     meshes= [tf.apply(mesh) for mesh in meshes]
-
-    fig, ax = meshes[0].scene_with_mesh_in_it()
-    for m in meshes[1:]:
-        fig, ax = m.scene_with_mesh_in_it(fig, ax)
-    ax = plot_bounding_box(ax, bbox_3d)
-    plt.show()
-
     return meshes
+
 
 
 """
@@ -454,6 +449,14 @@ SDFs for multiple pages:
     * reduce along N, outputting the index that is smallest or NoIndex if it's above the distance threshold
     * that's the ground truth segmentation data
 """
+
+def page_meshes_to_volume(page_meshes: list[Mesh], page_thickness: float, bbox_3d: BoundingBox3D):
+    grid = make_grid(bbox_3d, 100)
+    # TODO make this more efficient
+    sdfs = np.array([compute_signed_distances(grid, m) for m in page_meshes]).transpose((1,2,3,0)) # (H, W, D, N)
+    page_labels = np.argmin(sdfs, axis=-1) + 1 # page labels are positive indices
+    page_labels[sdfs.min(axis=-1) > page_thickness / 2] = 0 # no page is the zero index
+    return page_labels
 
 # mask = mesh_to_3d_page(mesh, bbox3d)
 
@@ -474,11 +477,18 @@ control_points_3d[..., 2] = np.random.rand(*control_points_3d.shape[:-1])
 
 #_test_transform_page(control_points_3d, bbox, volume_bbox)
 # _test_bounding_box_vis(control_points_3d, volume_bbox)
-tesselate_pages(control_points_3d, volume_bbox, 9, .1)
+meshes = tesselate_pages(control_points_3d, volume_bbox, 9, .1)
+labels = page_meshes_to_volume(meshes, .1, volume_bbox)
 
+fig, ax = meshes[0].scene_with_mesh_in_it()
+for m in meshes[1:]:
+    fig, ax = m.scene_with_mesh_in_it(fig, ax)
+ax = plot_bounding_box(ax, volume_bbox)
+plt.show()
 """
 How to generalise to multiple planes such that they don't intersect?
 * make spline global -> won't work
   * you have to only displace control points along the axis that you tesselate I THINK
+  * or deform a 3d space
 * then apply local deformations as a kernel if necessary
 """
