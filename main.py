@@ -4,8 +4,8 @@ Generate synthetic pages using bezier surfaces
 The pages should be non-overlapping. 
 
 TODO
-* how do you generate realistic crumples for pages st they're not all just the exact same?
-  and don't intersect?
+* how do you generate realistic crumples for pages st they're not all just the
+  exact same? and don't intersect?
     -> i think this is easy using randomly initialised gaussian heatmaps and
     taking some kernel and conving * the intesnsity to get the modified image
     (so it's a smooth transform)
@@ -43,6 +43,7 @@ My thoughts
   coordinates of each point on the plane and deforming that (so there's a heatmap
   over the whole volume that you scale the kernel with, identity most places
   except where there are local variations)
+
 """
 
 from math import comb
@@ -64,6 +65,17 @@ class BoundingBox3D:
     def __init__(self, min: tuple[float, float, float], max: tuple[float, float, float]):
         self.min = min
         self.max = max
+
+    def to_grid(self, nx: int, ny: int, nz: int) -> np.ndarray:
+        """
+        Returns (nx, ny, nz, 3) grid evenly spaced inside bounding box
+        """
+        xs = np.linspace(self.min[0], self.max[0], nx)
+        ys = np.linspace(self.min[1], self.max[1], ny)
+        zs = np.linspace(self.min[2], self.max[2], nz)
+        X, Y, Z = np.meshgrid(xs, ys, zs, indexing='ij')
+        control_points_3d = np.stack((X, Y, Z), axis=-1)
+        return control_points_3d
 
 def bernstein(index: int, degree: int, t: np.ndarray) -> np.ndarray:
     return comb(degree, index) * np.power(t, index) * np.power(1 - t, degree - index)
@@ -167,7 +179,7 @@ def triangulate_pointcloud(pointcloud: np.ndarray) -> Mesh:
     triangles = Delaunay(pointcloud[..., :2].reshape(-1, 2)).simplices
     return Mesh(pointcloud, triangles)
 
-def plane_pointcloud_3d_coords(bounding_box: BoundingBox2D, num_points_per_axis: int = 10) -> np.ndarray:
+def XY_plane_grid(bounding_box: BoundingBox2D, num_points_per_axis: int = 10) -> np.ndarray:
     """
     turn bounding box into z=0 grid of bounds uniformly spaced inside
     bounding_box, with grid_density points per axis
@@ -181,7 +193,7 @@ def plane_pointcloud_3d_coords(bounding_box: BoundingBox2D, num_points_per_axis:
 
 def unit_plane_3d(num_points_per_axis):
     unit_bbox = BoundingBox2D((0,0), (1,1))
-    return plane_pointcloud_3d_coords(unit_bbox, num_points_per_axis).reshape(-1, 3)
+    return XY_plane_grid(unit_bbox, num_points_per_axis).reshape(-1, 3)
 
 def bezier_surface(
         control_points, # (H,W,3)
@@ -474,7 +486,55 @@ def convert_mesh_to_polydata(mesh) -> vtk.vtkPolyData:
 
     return polydata
 
-def plot_meshes(meshes: list[Mesh]):
+def plot_bounding_box_vtk(renderer, bbox: BoundingBox3D):
+    """Plot a 3D bounding box in a VTK renderer."""
+    # Define the vertices of the bounding box
+    vertices = np.array([
+        [bbox.min[0], bbox.min[1], bbox.min[2]],
+        [bbox.max[0], bbox.min[1], bbox.min[2]],
+        [bbox.max[0], bbox.max[1], bbox.min[2]],
+        [bbox.min[0], bbox.max[1], bbox.min[2]],
+        [bbox.min[0], bbox.min[1], bbox.max[2]],
+        [bbox.max[0], bbox.min[1], bbox.max[2]],
+        [bbox.max[0], bbox.max[1], bbox.max[2]],
+        [bbox.min[0], bbox.max[1], bbox.max[2]]
+    ])
+    
+    # Define the edges of the bounding box
+    edges = [
+        [vertices[0], vertices[1]],
+        [vertices[1], vertices[2]],
+        [vertices[2], vertices[3]],
+        [vertices[3], vertices[0]],
+        [vertices[4], vertices[5]],
+        [vertices[5], vertices[6]],
+        [vertices[6], vertices[7]],
+        [vertices[7], vertices[4]],
+        [vertices[0], vertices[4]],
+        [vertices[1], vertices[5]],
+        [vertices[2], vertices[6]],
+        [vertices[3], vertices[7]]
+    ]
+
+    for edge in edges:
+        line = vtk.vtkLineSource()
+        line.SetPoint1(edge[0])
+        line.SetPoint2(edge[1])
+        line.Update()
+
+        mapper = vtk.vtkPolyDataMapper()
+        mapper.SetInputData(line.GetOutput())
+
+        actor = vtk.vtkActor()
+        actor.SetMapper(mapper)
+        actor.GetProperty().SetColor(1.0, 0.0, 0.0)  # Red color
+        actor.GetProperty().SetLineWidth(2)
+
+        renderer.AddActor(actor)
+    return renderer
+
+
+def plot_meshes(meshes: list[Mesh],bbox: BoundingBox3D):
     # Create a renderer and render window
     renderer = vtk.vtkRenderer()
     render_window = vtk.vtkRenderWindow()
@@ -497,6 +557,7 @@ def plot_meshes(meshes: list[Mesh]):
         renderer.AddActor(actor)
     
     # Set background color and render the scene
+    renderer = plot_bounding_box_vtk(renderer, bbox)
     renderer.SetBackground(0.1, 0.2, 0.3)
     render_window.Render()
     render_window_interactor.Start()
@@ -520,12 +581,10 @@ some papers on differentiable assignment (related to classifying instances)
 """
 
 
-from skimage.transform import resize
-
-
-# load mask from file
 """
+# load mask from file
 import nrrd
+from skimage.transform import resize
 tim_mask = nrrd.read('mask.nrrd')
 tim_mask = np.pad(resize(tim_mask[0], (16, 16, 16)), 1)
 print(f"shape of tim_mask is {tim_mask.shape}")
@@ -535,10 +594,27 @@ print(f"load mesh has {len(tim_mesh.triangles)} triangles and {len(tim_mesh.poin
 tim_mesh.show()
 """
 
+def save_labelmap(labelmap: np.ndarray, filename: str) -> None:
+    import nrrd
+    if len(labelmap.shape) != 3: raise ValueError("Labelmap must have shape (H, W, D)")
+    header = {
+        'type': 'int',
+        'dimension': 3,
+        'sizes': labels.shape,
+        'space': 'left-posterior-superior',
+        'kinds': ['domain', 'domain', 'domain'],
+        'endian': 'little',
+        'encoding': 'raw',
+        'space origin': [0.0, 0.0, 0.0],
+        'space directions': [[1.0, 0.0, 0.0],
+                             [0.0, 1.0, 0.0],
+                             [0.0, 0.0, 1.0]]
+    }
+    nrrd.write(filename, labelmap, header)
+    
 
 # mask = mesh_to_3d_page(mesh, bbox3d)
 
-# save_mask_as_nifti(mask, 'mask.nii')
 # mask_mesh = mask_to_mesh(mask)
 # mask_mesh.show()
 
@@ -549,15 +625,100 @@ m = 6
 # generate control points in unit grid
 bbox = BoundingBox2D((0,0), (1,1)) 
 volume_bbox = BoundingBox3D((0,0,0), (1,1,1))
-control_points_3d = make_control_points_3d(n, m, bbox)
 
-control_points_3d[..., 2] = np.random.rand(*control_points_3d.shape[:-1])
+"""
+from timeit import default_timer as timer
+for i in range(4):
+    control_points_3d = make_control_points_3d(n, m, bbox)
+    control_points_3d[..., 2] = np.random.rand(*control_points_3d.shape[:-1])
 
-meshes = tesselate_pages(control_points_3d, volume_bbox, 9, .1)
+    meshes = tesselate_pages(control_points_3d, volume_bbox, 9, .1)
+    labels = page_meshes_to_volume(meshes, .05, volume_bbox)
+    save_labelmap(labels, f'labels{i}.nrrd')
+"""
+
+# plot_meshes(meshes, volume_bbox)
+
+
+"""
+steps for page generation:
+    * just get barebones pages training and get a simple network that works
+    * get pattern to match 
+    * look at distribution of pixel intensities and sample synthetic page intensities from measured distribution
+    * measure intensity from papyrus
+"""
+
+
+######################## 3d volume deformation ###############################
+
+def bezier_space_deformation(control_points: np.ndarray, p: np.ndarray) -> np.ndarray:
+    """
+    Computes Q(u, v, w) = sum_over(i,j,k) C_i,j,k B_n,i(u) B_m,j(v) B_l,k(w)
+
+    Where C_ijk is the ijkth control point, a point in 3d space.
+    """ 
+
+    # I think there's a bug here, you shouldn't be able to deform the pages into overlapping parts
+    assert p.shape[-1] == 3
+    assert len(p.shape) == 2 # (N,3)
+    assert control_points.shape[-1] == 3
+    assert len(control_points.shape) == 4
+    n, m, l = control_points.shape[:-1]
+    u = p[..., 0]
+    v = p[..., 1]
+    w = p[..., 2]
+    
+    B_u = np.array([bernstein(i, n - 1, u) for i in range(n)]) # (n,N)
+    B_v = np.array([bernstein(j, m - 1, v) for j in range(m)]) # (m,N)
+    B_w = np.array([bernstein(k, l - 1, w) for k in range(l)]) # (l,N)
+    
+    B_uvw = np.einsum('iN, jN, kN -> Nijk', B_u, B_v, B_w)
+    pts = np.einsum('ijka, Nijk -> Na',control_points, B_uvw)
+    return pts # (N, 3)
+
+def plot_point_cloud(points: np.ndarray, fig = None, ax = None, color: str = 'b', marker: str = 'o'):
+    """
+    Plot a 3D point cloud using matplotlib.
+
+    Args:
+        points (np.ndarray): A (N, 3) array of 3D points.
+        color (str): The color of the points (default: 'b' for blue).
+        marker (str): The marker style (default: 'o' for circles).
+
+    Example usage:
+        points = np.random.rand(100, 3)
+        plot_point_cloud(points)
+    """
+    assert points.shape[1] == 3, "Input points should be a (N, 3) array."
+
+    fig = plt.figure(figsize=(10, 8)) if fig is None else fig
+    ax = fig.add_subplot(111, projection='3d') if ax is None else ax
+    ax.scatter(points[:, 0], points[:, 1], points[:, 2], c=color, marker=marker)
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_title('3D Point Cloud')
+
+    # plt.show()
+    return fig, ax
+
+
+volume_bbox = BoundingBox3D((0,0,0), (1,1,1))
+control_points = volume_bbox.to_grid(5, 5, 5)
+control_points += np.random.rand(*control_points.shape) 
+
+pc = unit_plane_3d(num_points_per_axis=40)
+planes = [HomogeneousTransform.translation(0,0,z).apply(pc) for z in np.linspace(0,1,10)]
+deformed_planes = [bezier_space_deformation(control_points, plane) for plane in planes]
+fig, ax = plot_point_cloud(control_points.reshape(-1, 3))
+meshes = [Mesh(dp, triangulate_pointcloud(pc).triangles) for dp in deformed_planes]
+for mesh in meshes:
+    fig, ax = mesh.scene_with_mesh_in_it(fig=fig, ax=ax)
+
+plt.show()
+
 labels = page_meshes_to_volume(meshes, .1, volume_bbox)
+save_labelmap(labels, 'labels.nrrd')
 
-# fig, ax = meshes[0].scene_with_mesh_in_it()
-# for m in meshes[1:]:
-#     fig, ax = m.scene_with_mesh_in_it(fig, ax)
-# ax = plot_bounding_box(ax, volume_bbox)
-# plt.show()
+
