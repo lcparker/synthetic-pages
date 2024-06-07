@@ -6,20 +6,43 @@ The pages should be non-overlapping.
 TODO
 * how do you generate realistic crumples for pages st they're not all just the exact same?
   and don't intersect?
-    -> i think this is easy using randomly initialised gaussian heatmaps and taking some kernel and conving * the intesnsity to get the modified image (so it's a smooth transform)
+    -> i think this is easy using randomly initialised gaussian heatmaps and
+    taking some kernel and conving * the intesnsity to get the modified image
+    (so it's a smooth transform)
 * analyse perf, it's starting to get slow
 * maybe making the distance interpolate over triangle indices would speed things up?
 
 LATER
 * generate synthetic N-page blocks en masse for training
+* one way to get realistic page shapes is to take already-segmented regions and
+  register a synthetic page to them. then, we can use those registered control
+  points as starter points to tesselate pages
+* based on pretraining results, try texture matching to improve generalisation
+
+REGISTRATION
+*** do this later if at all. it's very difficult to come up with a
+differentiable way to fit synthetically generated pages to real data *** 
+* get already-segmented meshes
+* overlay/ crop to volumes
+* initialise unit 3d grid of control points
+* frame it as an optimisation problem (with regularisation) to minimise the
+  distances between generated mesh and the actual one
+* get adjusted control points
+* use those as starting points (deform randomly/add noise) to try and train on
+  a super-distribution of the page overlap style
+* can generate synthetic pages based on that
+
 
 My thoughts
-* generate N straight pages (planes) oriented in a random direction in the scene
+* generate N straight pages (planes) oriented in a random direction in the
+  scene
 * distort with control points
 * apply random local distortions/variations as like a masked kernel 
-* is it possible/feasible to generate the pages by hand manually adjusting the control points in 3d to deform the whole space, then getting the (u,v,w) coordinates of each point on the plane and deforming that
-(so there's a heatmap over the whole volume that you scale the kernel with,
-identity most places except where there are local variations)
+* is it possible/feasible to generate the pages by hand manually adjusting the
+  control points in 3d to deform the whole space, then getting the (u,v,w)
+  coordinates of each point on the plane and deforming that (so there's a heatmap
+  over the whole volume that you scale the kernel with, identity most places
+  except where there are local variations)
 """
 
 from math import comb
@@ -28,9 +51,10 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 from scipy.spatial.transform import Rotation
-from typing import Union, TypeVar
+from typing import TypeVar
 
 type Point2D = tuple[float, float]
+
 class BoundingBox2D:
     def __init__(self, min: Point2D, max: Point2D):
         self.min = min
@@ -134,13 +158,16 @@ class Mesh:
 
         plt.show()
 
-def triangulate_pointcloud(pointcloud: np.ndarray):
+def triangulate_pointcloud(pointcloud: np.ndarray) -> Mesh:
+    """
+    Triangulates the XY projection of pointcloud
+    """
     assert pointcloud.shape[-1] == 3
     from scipy.spatial import Delaunay
     triangles = Delaunay(pointcloud[..., :2].reshape(-1, 2)).simplices
     return Mesh(pointcloud, triangles)
 
-def plane_pointcloud_3d_coords(bounding_box: BoundingBox2D, num_points_per_axis: int = 10):
+def plane_pointcloud_3d_coords(bounding_box: BoundingBox2D, num_points_per_axis: int = 10) -> np.ndarray:
     """
     turn bounding box into z=0 grid of bounds uniformly spaced inside
     bounding_box, with grid_density points per axis
@@ -217,6 +244,7 @@ def mask_to_mesh(mask) -> Mesh:
     verts, faces, _, _ = marching_cubes(mask, level=0)
     return Mesh(verts, faces)
 
+
 Transformable = TypeVar('Transformable', Mesh, np.ndarray)
 class HomogeneousTransform:
     def __init__(self, matrix=None):
@@ -232,7 +260,37 @@ class HomogeneousTransform:
         elif isinstance(x, np.ndarray):
             return self._apply_ndarray(x)
         else:
-            raise ValueError("Unsupported type for matrix multiplication")
+            raise ValueError(f"Unsupported type for matrix multiplication: {type(x)}")
+
+    @staticmethod
+    def translation(x: float, y: float, z: float):
+        # Create translation matrix
+        translation_matrix = np.eye(4)
+        translation_matrix[:3, 3] = np.array([x,y,z])
+        return HomogeneousTransform(translation_matrix)
+
+    @staticmethod
+    def random_transform(bbox: BoundingBox3D):
+        # Generate random rotation
+        rotation = Rotation.random().as_matrix()
+        
+        # Generate random scaling
+        scale_factors = np.random.uniform(0.5, 1.5, size=3)
+        scale_matrix = np.diag(np.append(scale_factors, 1))
+        
+        # Generate random translation that keeps the object within the bounding box
+        # translation = np.random.uniform(bbox.min, bbox.max)
+        
+        # Create translation matrix
+        translation_matrix = np.eye(4)
+        # translation_matrix[:3, 3] = translation
+        translation_matrix[:3, 3] = 0.5 * (np.array(bbox.min) + np.array(bbox.max))
+        
+        # Combine rotation, scaling, and translation into a single transformation matrix
+        transform_matrix = translation_matrix @ scale_matrix
+        transform_matrix[:3, :3] = transform_matrix[:3, :3] @ rotation
+        
+        return HomogeneousTransform(transform_matrix)
 
     def _apply_ndarray(self, points: np.ndarray) -> np.ndarray:
         # Ensure points are of shape (..., 3)
@@ -249,7 +307,6 @@ class HomogeneousTransform:
 
     def _apply_mesh(self, mesh: Mesh) -> Mesh:
         return Mesh(self.apply(mesh.points), mesh.triangles)
-
 
 ###### tests for homogeneous transforms ######
 
@@ -314,31 +371,10 @@ def run_transform_tests():
 run_transform_tests()
 
 ###############################
-def random_transform(bbox: BoundingBox3D) -> HomogeneousTransform:
-    # Generate random rotation
-    rotation = Rotation.random().as_matrix()
-    
-    # Generate random scaling
-    scale_factors = np.random.uniform(0.5, 1.5, size=3)
-    scale_matrix = np.diag(np.append(scale_factors, 1))
-    
-    # Generate random translation that keeps the object within the bounding box
-    # translation = np.random.uniform(bbox.min, bbox.max)
-    
-    # Create translation matrix
-    translation_matrix = np.eye(4)
-    # translation_matrix[:3, 3] = translation
-    translation_matrix[:3, 3] = 0.5 * (np.array(bbox.min) + np.array(bbox.max))
-    
-    # Combine rotation, scaling, and translation into a single transformation matrix
-    transform_matrix = translation_matrix @ scale_matrix
-    transform_matrix[:3, :3] = transform_matrix[:3, :3] @ rotation
-    
-    return HomogeneousTransform(transform_matrix)
 
 def _test_transform_page(control_points, bbox_3d: BoundingBox3D):
     mesh = bezier_surface(control_points, num_points_per_axis=10)
-    tf = random_transform(bbox_3d)
+    tf = HomogeneousTransform.random_transform(bbox_3d)
     mesh = tf.apply(mesh)
 
     _, ax = mesh.scene_with_mesh_in_it()
@@ -388,7 +424,7 @@ def _test_bounding_box_vis(control_points, bbox_3d: BoundingBox3D):
     # centre mesh at [0,0,0]
     mesh_centre = mesh.points.mean(axis=0)
     mesh.points = mesh.points - mesh_centre
-    tf = random_transform(bbox_3d)
+    tf = HomogeneousTransform.random_transform(bbox_3d)
 
     mesh = tf.apply(mesh)
 
@@ -396,24 +432,15 @@ def _test_bounding_box_vis(control_points, bbox_3d: BoundingBox3D):
     ax = plot_bounding_box(ax, bbox_3d)
     plt.show()
 
-
-### MULTI PAGE STUFF
-
-def translation(x,y,z) -> HomogeneousTransform:
-    # Generate random translation that keeps the object within the bounding box
-    
-    # Create translation matrix
-    translation_matrix = np.eye(4)
-    translation_matrix[:3, 3] = np.array([x,y,z])
-    return HomogeneousTransform(translation_matrix)
+### MULTI PAGE
 
 def tesselate_pages(control_points, bbox_3d, num_pages, spacing) -> list[Mesh]:
     mesh = bezier_surface(control_points, num_points_per_axis = 50)
     mesh_centre = mesh.points.mean(axis=0)
     mesh = Mesh(mesh.points - mesh_centre, mesh.triangles)
     zs = np.linspace(-spacing * num_pages/2, spacing * num_pages/2, num_pages)
-    meshes= [translation(0,0,z).apply(mesh) for z in zs]
-    tf = random_transform(bbox_3d)
+    meshes= [HomogeneousTransform.translation(0,0,z).apply(mesh) for z in zs]
+    tf = HomogeneousTransform.random_transform(bbox_3d)
     meshes= [tf.apply(mesh) for mesh in meshes]
     return meshes
 
@@ -423,6 +450,91 @@ def page_meshes_to_volume(page_meshes: list[Mesh], page_thickness: float, bbox_3
     page_labels = np.argmin(sdfs, axis=-1) + 1 # page labels are positive indices
     page_labels[sdfs.min(axis=-1) > page_thickness / 2] = 0 # no page is the zero index
     return page_labels
+
+
+import vtk
+def convert_mesh_to_polydata(mesh) -> vtk.vtkPolyData:
+    # Create points object
+    points = vtk.vtkPoints()
+    for point in mesh.points:
+        points.InsertNextPoint(point)
+    
+    # Create triangles object
+    triangles = vtk.vtkCellArray()
+    for triangle in mesh.triangles:
+        tri = vtk.vtkTriangle()
+        for i in range(3):
+            tri.GetPointIds().SetId(i, triangle[i])
+        triangles.InsertNextCell(tri)
+    
+    # Create a polydata object
+    polydata = vtk.vtkPolyData()
+    polydata.SetPoints(points)
+    polydata.SetPolys(triangles)
+
+    return polydata
+
+def plot_meshes(meshes: list[Mesh]):
+    # Create a renderer and render window
+    renderer = vtk.vtkRenderer()
+    render_window = vtk.vtkRenderWindow()
+    render_window.AddRenderer(renderer)
+    render_window_interactor = vtk.vtkRenderWindowInteractor()
+    render_window_interactor.SetRenderWindow(render_window)
+    
+    for mesh in meshes:
+        polydata = convert_mesh_to_polydata(mesh)
+        
+        # Create a mapper
+        mapper = vtk.vtkPolyDataMapper()
+        mapper.SetInputData(polydata)
+        
+        # Create an actor
+        actor = vtk.vtkActor()
+        actor.SetMapper(mapper)
+        
+        # Add the actor to the renderer
+        renderer.AddActor(actor)
+    
+    # Set background color and render the scene
+    renderer.SetBackground(0.1, 0.2, 0.3)
+    render_window.Render()
+    render_window_interactor.Start()
+
+
+"""
+Registration
+* how to get differentiable output to minimise?
+  * maybe use jax or something and do it implicitly?
+  * randomly subsample target mesh, randomly subsample transformed grid (recreate subsample/mesh each iteration)
+* hungarian algorithm to find correspondences
+* figure out how to interpret everything else differentiably
+
+some papers on differentiable assignment (related to classifying instances)
+- https://arxiv.org/pdf/2211.14448
+- https://logicalreasoninggnn.github.io/papers/10.pdf
+- https://arxiv.org/pdf/1906.06618
+- https://arxiv.org/pdf/2111.00030
+- https://github.com/sharathadavanne/hungarian-net
+
+"""
+
+
+from skimage.transform import resize
+
+
+# load mask from file
+"""
+import nrrd
+tim_mask = nrrd.read('mask.nrrd')
+tim_mask = np.pad(resize(tim_mask[0], (16, 16, 16)), 1)
+print(f"shape of tim_mask is {tim_mask.shape}")
+
+tim_mesh = mask_to_mesh(tim_mask)
+print(f"load mesh has {len(tim_mesh.triangles)} triangles and {len(tim_mesh.points)} points")
+tim_mesh.show()
+"""
+
 
 # mask = mesh_to_3d_page(mesh, bbox3d)
 
@@ -441,21 +553,11 @@ control_points_3d = make_control_points_3d(n, m, bbox)
 
 control_points_3d[..., 2] = np.random.rand(*control_points_3d.shape[:-1])
 
-#_test_transform_page(control_points_3d, bbox, volume_bbox)
-# _test_bounding_box_vis(control_points_3d, volume_bbox)
 meshes = tesselate_pages(control_points_3d, volume_bbox, 9, .1)
 labels = page_meshes_to_volume(meshes, .1, volume_bbox)
 
-fig, ax = meshes[0].scene_with_mesh_in_it()
-for m in meshes[1:]:
-    fig, ax = m.scene_with_mesh_in_it(fig, ax)
-ax = plot_bounding_box(ax, volume_bbox)
-plt.show()
-
-"""
-How to generalise to multiple planes such that they don't intersect?
-* make spline global -> won't work
-  * you have to only displace control points along the axis that you tesselate I THINK
-  * or deform a 3d space
-* then apply local deformations as a kernel if necessary
-"""
+# fig, ax = meshes[0].scene_with_mesh_in_it()
+# for m in meshes[1:]:
+#     fig, ax = m.scene_with_mesh_in_it(fig, ax)
+# ax = plot_bounding_box(ax, volume_bbox)
+# plt.show()
