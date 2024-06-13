@@ -651,22 +651,25 @@ steps for page generation:
 
 ######################## 3d volume deformation ###############################
 
-def bezier_space_deformation(control_points: np.ndarray, p: np.ndarray) -> np.ndarray:
+def bezier_space_deformation(control_points: np.ndarray, points: np.ndarray) -> np.ndarray:
     """
+    Deforms 3d points by warping the 3d space according to the defined control points.
+    If you want the geometry to be well-defined, then the control points cannot cross over.
+
     Computes Q(u, v, w) = sum_over(i,j,k) C_i,j,k B_n,i(u) B_m,j(v) B_l,k(w)
 
-    Where C_ijk is the ijkth control point, a point in 3d space.
+    Where C_ijk is the ijkth control point, a point in 3d space. The indices (i,j,k)
+    correspond to (x,y,z) axes, so for unit control points (a 3d evenly spaced grid) 
+    control_points[:,0,0] should be a list of points whose x-coordinates increase as i increases while the y and z coordinates remain the same.
     """ 
-
-    # I think there's a bug here, you shouldn't be able to deform the pages into overlapping parts
-    assert p.shape[-1] == 3
-    assert len(p.shape) == 2 # (N,3)
+    assert points.shape[-1] == 3
+    assert len(points.shape) == 2 # (N,3)
     assert control_points.shape[-1] == 3
     assert len(control_points.shape) == 4
     n, m, l = control_points.shape[:-1]
-    u = p[..., 0]
-    v = p[..., 1]
-    w = p[..., 2]
+    u = points[..., 0]
+    v = points[..., 1]
+    w = points[..., 2]
     
     B_u = np.array([bernstein(i, n - 1, u) for i in range(n)]) # (n,N)
     B_v = np.array([bernstein(j, m - 1, v) for j in range(m)]) # (m,N)
@@ -703,22 +706,58 @@ def plot_point_cloud(points: np.ndarray, fig = None, ax = None, color: str = 'b'
     # plt.show()
     return fig, ax
 
+def control_points_well_ordered(control_points: np.ndarray) -> bool:
+    assert len(control_points.shape) == 4
+    assert control_points.shape[-1] == 3
+
+    for i in reversed(range(control_points.shape[0]-1)):
+        if np.any(control_points[i+1,:,:,0] < control_points[i,:,:,0]):
+            print(f'failed at x,{i}')
+            return False
+    for j in reversed(range(control_points.shape[1]-1)):
+        if np.any(control_points[:,j+1,:,1] < control_points[:,j,:,1]):
+            print(f'failed at y,{j}')
+            return False
+    for k in reversed(range(control_points.shape[2]-1)):
+        if np.any(control_points[:,:,k+1,2] < control_points[:,:,k, 2]):
+            print(f'failed at z,{k}')
+            return False
+    return True
+
+
+
 
 volume_bbox = BoundingBox3D((0,0,0), (1,1,1))
 control_points = volume_bbox.to_grid(5, 5, 5)
-control_points += np.random.rand(*control_points.shape) 
 
+def deform_control_points(control_points: np.ndarray) -> np.ndarray:
+    assert len(control_points.shape) == 4
+    assert control_points.shape[-1] == 3
+
+    x_length = control_points[...,0].max() - control_points[...,0].min()
+    y_length = control_points[...,1].max() - control_points[...,1].min()
+    z_length = control_points[...,2].max() - control_points[...,2].min()
+
+    adjustments = (np.random.random_sample(control_points.shape) - 0.5) * np.array(
+        [
+            x_length/(control_points.shape[0]-1), 
+            y_length/(control_points.shape[1]-1), 
+            z_length/(control_points.shape[2]-1), 
+        ])
+    return control_points + adjustments
+
+control_points = deform_control_points(control_points)
 pc = unit_plane_3d(num_points_per_axis=40)
-planes = [HomogeneousTransform.translation(0,0,z).apply(pc) for z in np.linspace(0,1,10)]
-deformed_planes = [bezier_space_deformation(control_points, plane) for plane in planes]
+#planes = [HomogeneousTransform.translation(0,0,z).apply(pc) for z in np.linspace(0,1,10)]
+#deformed_planes = [bezier_space_deformation(control_points, plane) for plane in planes]
+print(f'no overlaps?: {control_points_well_ordered(control_points)}')
 fig, ax = plot_point_cloud(control_points.reshape(-1, 3))
-meshes = [Mesh(dp, triangulate_pointcloud(pc).triangles) for dp in deformed_planes]
-for mesh in meshes:
-    fig, ax = mesh.scene_with_mesh_in_it(fig=fig, ax=ax)
-
 plt.show()
+#meshes = [Mesh(dp, triangulate_pointcloud(pc).triangles) for dp in deformed_planes]
+#for mesh in meshes:
+#    fig, ax = mesh.scene_with_mesh_in_it(fig=fig, ax=ax)
 
-labels = page_meshes_to_volume(meshes, .1, volume_bbox)
-save_labelmap(labels, 'labels.nrrd')
-
-
+#plt.show()
+#
+#labels = page_meshes_to_volume(meshes, .1, volume_bbox)
+#save_labelmap(labels, 'labels.nrrd')
