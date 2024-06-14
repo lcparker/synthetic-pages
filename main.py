@@ -109,6 +109,7 @@ def bezier_3d(control_points: np.ndarray, p: np.ndarray) -> np.ndarray:
     pts = np.einsum('ija, Nij -> Na',control_points, B_uvw)
     return pts # (N, 3)
 
+import vtk
 class Mesh:
     def __init__(self, points, triangles):
         assert points.shape[-1] == 3
@@ -169,6 +170,25 @@ class Mesh:
         ax.set_title('3D Mesh with Filled Surface')
 
         plt.show()
+
+    def to_polydata(self) -> vtk.vtkPolyData:
+        # This could become a bottleneck if we do this for very large meshes
+        points = vtk.vtkPoints()
+        for point in mesh.points:
+            points.InsertNextPoint(point)
+        
+        triangles = vtk.vtkCellArray()
+        for triangle in mesh.triangles:
+            tri = vtk.vtkTriangle()
+            for i in range(3):
+                tri.GetPointIds().SetId(i, triangle[i])
+            triangles.InsertNextCell(tri)
+        
+        polydata = vtk.vtkPolyData()
+        polydata.SetPoints(points)
+        polydata.SetPolys(triangles)
+
+        return polydata
 
 def triangulate_pointcloud(pointcloud: np.ndarray) -> Mesh:
     """
@@ -446,7 +466,13 @@ def _test_bounding_box_vis(control_points, bbox_3d: BoundingBox3D):
 
 ### MULTI PAGE
 
-def tesselate_pages(control_points, bbox_3d, num_pages, spacing) -> list[Mesh]:
+def tesselate_pages(control_points, bbox_3d: BoundingBox3D, num_pages: int, spacing: float) -> list[Mesh]:
+    """
+    Tesselate `num_pages` deformed planes evenly spaced along the z-axis,
+    'spacing' units apart. Transforms them to the centre of the bounding box
+    provided and provided a random rotation.
+
+    """
     mesh = bezier_surface(control_points, num_points_per_axis = 50)
     mesh_centre = mesh.points.mean(axis=0)
     mesh = Mesh(mesh.points - mesh_centre, mesh.triangles)
@@ -464,27 +490,6 @@ def page_meshes_to_volume(page_meshes: list[Mesh], page_thickness: float, bbox_3
     return page_labels
 
 
-import vtk
-def convert_mesh_to_polydata(mesh) -> vtk.vtkPolyData:
-    # Create points object
-    points = vtk.vtkPoints()
-    for point in mesh.points:
-        points.InsertNextPoint(point)
-    
-    # Create triangles object
-    triangles = vtk.vtkCellArray()
-    for triangle in mesh.triangles:
-        tri = vtk.vtkTriangle()
-        for i in range(3):
-            tri.GetPointIds().SetId(i, triangle[i])
-        triangles.InsertNextCell(tri)
-    
-    # Create a polydata object
-    polydata = vtk.vtkPolyData()
-    polydata.SetPoints(points)
-    polydata.SetPolys(triangles)
-
-    return polydata
 
 def plot_bounding_box_vtk(renderer, bbox: BoundingBox3D):
     """Plot a 3D bounding box in a VTK renderer."""
@@ -566,7 +571,7 @@ def plot_meshes(meshes: list[Mesh],bbox: BoundingBox3D):
 """
 Registration
 * how to get differentiable output to minimise?
-  * maybe use jax or something and do it implicitly?
+  * maybe use jax or something and do it implicitly (build graph and backprop through)?
   * randomly subsample target mesh, randomly subsample transformed grid (recreate subsample/mesh each iteration)
 * hungarian algorithm to find correspondences
 * figure out how to interpret everything else differentiably
@@ -587,6 +592,7 @@ import nrrd
 from skimage.transform import resize
 tim_mask = nrrd.read('mask.nrrd')
 tim_mask = np.pad(resize(tim_mask[0], (16, 16, 16)), 1)
+# nb naive marching cubes on this creates a ginormous mesh
 print(f"shape of tim_mask is {tim_mask.shape}")
 
 tim_mesh = mask_to_mesh(tim_mask)
@@ -637,7 +643,6 @@ for i in range(4):
     save_labelmap(labels, f'labels{i}.nrrd')
 """
 
-# plot_meshes(meshes, volume_bbox)
 
 
 """
@@ -707,6 +712,11 @@ def plot_point_cloud(points: np.ndarray, fig = None, ax = None, color: str = 'b'
     return fig, ax
 
 def control_points_well_ordered(control_points: np.ndarray) -> bool:
+    """
+    Verify that the control points are well-ordered. 'Well-ordered' here means
+    that none of the control points cross over eachother. This ensures that the
+    bezier space deformation won't cause non-intersecting objects to intersect.
+    """
     assert len(control_points.shape) == 4
     assert control_points.shape[-1] == 3
 
@@ -725,12 +735,11 @@ def control_points_well_ordered(control_points: np.ndarray) -> bool:
     return True
 
 
-
-
-volume_bbox = BoundingBox3D((0,0,0), (1,1,1))
-control_points = volume_bbox.to_grid(5, 5, 5)
-
 def deform_control_points(control_points: np.ndarray) -> np.ndarray:
+    """
+    Apply a random shift to each control point, such that if the input is a
+    uniform grid the grid will still be well-ordered.
+    """
     assert len(control_points.shape) == 4
     assert control_points.shape[-1] == 3
 
@@ -746,18 +755,21 @@ def deform_control_points(control_points: np.ndarray) -> np.ndarray:
         ])
     return control_points + adjustments
 
+volume_bbox = BoundingBox3D((0,0,0), (1,1,1))
+control_points = volume_bbox.to_grid(5, 5, 5)
+
 control_points = deform_control_points(control_points)
 pc = unit_plane_3d(num_points_per_axis=40)
-#planes = [HomogeneousTransform.translation(0,0,z).apply(pc) for z in np.linspace(0,1,10)]
-#deformed_planes = [bezier_space_deformation(control_points, plane) for plane in planes]
+planes = [HomogeneousTransform.translation(0,0,z).apply(pc) for z in np.linspace(0,1,10)]
+deformed_planes = [bezier_space_deformation(control_points, plane) for plane in planes]
 print(f'no overlaps?: {control_points_well_ordered(control_points)}')
 fig, ax = plot_point_cloud(control_points.reshape(-1, 3))
-plt.show()
-#meshes = [Mesh(dp, triangulate_pointcloud(pc).triangles) for dp in deformed_planes]
-#for mesh in meshes:
-#    fig, ax = mesh.scene_with_mesh_in_it(fig=fig, ax=ax)
+# plt.show()
+meshes = [Mesh(dp, triangulate_pointcloud(pc).triangles) for dp in deformed_planes]
+for mesh in meshes:
+    fig, ax = mesh.scene_with_mesh_in_it(fig=fig, ax=ax)
 
-#plt.show()
-#
-#labels = page_meshes_to_volume(meshes, .1, volume_bbox)
-#save_labelmap(labels, 'labels.nrrd')
+plt.show()
+
+labels = page_meshes_to_volume(meshes, .1, volume_bbox)
+save_labelmap(labels, 'labels.nrrd')
