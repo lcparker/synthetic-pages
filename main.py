@@ -501,9 +501,9 @@ def tesselate_pages(control_points, bbox_3d: BoundingBox3D, num_pages: int, spac
     meshes= [tf.apply(mesh) for mesh in meshes]
     return meshes
 
-def page_meshes_to_volume(page_meshes: list[Mesh], page_thickness: float, bbox_3d: BoundingBox3D):
-    grid = make_grid(bbox_3d, 100)
-    sdfs = np.array([compute_signed_distances(grid, m, page_thickness/2) for m in page_meshes]).transpose((1,2,3,0)) # (H, W, D, N)
+def page_meshes_to_volume(page_meshes: list[Mesh], grid_size: int, page_thickness: float, bbox_3d: BoundingBox3D):
+    grid = make_grid(bbox_3d, grid_size)
+    sdfs = np.array([compute_signed_distances(grid, m, distance_upper_bound = page_thickness/2) for m in page_meshes]).transpose((1,2,3,0)) # (H, W, D, N)
     page_labels = np.argmin(sdfs, axis=-1) + 1 # page labels are positive indices
     page_labels[sdfs.min(axis=-1) > page_thickness / 2] = 0 # no page is the zero index
     return page_labels
@@ -813,6 +813,5 @@ for mesh in meshes:
     fig, ax = mesh.scene_with_mesh_in_it(fig=fig, ax=ax)
 
 # plt.show()
-labels = page_meshes_to_volume(meshes, .1, volume_bbox)
+labels = page_meshes_to_volume(meshes, 128, .1, volume_bbox)
 save_labelmap(labels, 'labels.nrrd')
-
