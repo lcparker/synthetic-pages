@@ -9,8 +9,20 @@ TODO
     -> i think this is easy using randomly initialised gaussian heatmaps and
     taking some kernel and conving * the intesnsity to get the modified image
     (so it's a smooth transform)
-* analyse perf, it's starting to get slow
 * maybe making the distance interpolate over triangle indices would speed things up?
+  * speed up generation of masks
+    * almost all the time is turning meshes to volume
+  * move nrrd stuff into classes -- getting hard to read
+    * maybe move util functions into separate file
+  * start getting intensity mapping for regions so the synthetic pages look more realistic
+  * think about how to verify training in stages
+    * raw unet with permutation layer, synthetic data only, no texture-mapping
+    * raw unet with permutation layer, synthetic data only, yes texture-mapping
+    * pretrained (air-papyrus) unet with permutation layer, synthetic data only, no texture mapping
+        * hypothesis: it won't be much better, maybe worse, relative to raw unet
+    * pretrained (air-papyrus) unet with permutation layer, synthetic data only, yes texture mapping
+    * raw instance-unet, synthetic texture-mapped training, test on manual layer data
+    * pretrained instance-unet, synthetic texture-mapped training, test on manual layer data
 
 LATER
 * generate synthetic N-page blocks en masse for training
@@ -555,7 +567,7 @@ def plot_meshes(meshes: list[Mesh],bbox: BoundingBox3D):
     render_window_interactor.SetRenderWindow(render_window)
     
     for mesh in meshes:
-        polydata = convert_mesh_to_polydata(mesh)
+        polydata = mesh.to_polydata()
         
         # Create a mapper
         mapper = vtk.vtkPolyDataMapper()
@@ -624,6 +636,29 @@ def save_labelmap(labelmap: np.ndarray, filename: str) -> None:
                              [0.0, 0.0, 1.0]]
     }
     nrrd.write(filename, labelmap, header)
+
+## TODO fill this in later
+import nrrd
+from pathlib import Path
+class Nrrd:
+    def __init__(self, volume: np.ndarray, metadata) -> None:
+        if len(volume.shape) != 3: raise ValueError("Nrrd volume must have shape (H, W, D)")
+        self.volume = volume
+        self.metadata = metadata
+
+    def __is_valid_metadata(self, metadata) -> bool:
+        # TODO add validation
+        return True
+
+    @staticmethod
+    def from_file(file: str | Path):
+        assert False, "Check what index order should be before implementing this"
+        volume, metadata = nrrd.read(file)
+        return Nrrd(volume, metadata)
+
+    def write(self, filename: str | Path) -> None:
+        nrrd.write(file = str(filename), data = self.volume, header = self.metadata)
+
     
 
 # mask = mesh_to_3d_page(mesh, bbox3d)
@@ -777,7 +812,7 @@ meshes = [Mesh(dp, triangulate_pointcloud(pc).triangles) for dp in deformed_plan
 for mesh in meshes:
     fig, ax = mesh.scene_with_mesh_in_it(fig=fig, ax=ax)
 
-plt.show()
-
+# plt.show()
 labels = page_meshes_to_volume(meshes, .1, volume_bbox)
 save_labelmap(labels, 'labels.nrrd')
+
