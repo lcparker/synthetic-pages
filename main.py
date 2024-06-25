@@ -255,11 +255,18 @@ def make_grid(bbox: BoundingBox3D, points_per_axis: int):
     return grid # (H,W,D,3)
 
 def compute_signed_distances(
-        grid: np.ndarray,  # (H,W,D,3)
-        mesh: Mesh) -> np.ndarray:
+        grid: np.ndarray,  # (...,3)
+        mesh: Mesh,
+        distance_upper_bound: float = 1e16) -> np.ndarray:
+    """
+    Compute signed distances from the supplied grid of points to the mesh. This
+    only calculates distance to the nearest vertex, it doesn't interpolate.
+    Will return infinity for any points that aren't within the upper bound
+    provided.
+    """
     from scipy.spatial import KDTree
     tree = KDTree(mesh.points)
-    distances, _ = tree.query(grid.reshape(-1, 3))
+    distances, _ = tree.query(grid.reshape(-1, 3), distance_upper_bound=distance_upper_bound)
     sdf = distances.reshape(grid.shape[:-1])
     return sdf
 
@@ -484,7 +491,7 @@ def tesselate_pages(control_points, bbox_3d: BoundingBox3D, num_pages: int, spac
 
 def page_meshes_to_volume(page_meshes: list[Mesh], page_thickness: float, bbox_3d: BoundingBox3D):
     grid = make_grid(bbox_3d, 100)
-    sdfs = np.array([compute_signed_distances(grid, m) for m in page_meshes]).transpose((1,2,3,0)) # (H, W, D, N)
+    sdfs = np.array([compute_signed_distances(grid, m, page_thickness/2) for m in page_meshes]).transpose((1,2,3,0)) # (H, W, D, N)
     page_labels = np.argmin(sdfs, axis=-1) + 1 # page labels are positive indices
     page_labels[sdfs.min(axis=-1) > page_thickness / 2] = 0 # no page is the zero index
     return page_labels
@@ -633,7 +640,6 @@ bbox = BoundingBox2D((0,0), (1,1))
 volume_bbox = BoundingBox3D((0,0,0), (1,1,1))
 
 """
-from timeit import default_timer as timer
 for i in range(4):
     control_points_3d = make_control_points_3d(n, m, bbox)
     control_points_3d[..., 2] = np.random.rand(*control_points_3d.shape[:-1])
@@ -758,6 +764,7 @@ def deform_control_points(control_points: np.ndarray) -> np.ndarray:
 
 volume_bbox = BoundingBox3D((0,0,0), (1,1,1))
 control_points = volume_bbox.to_grid(5, 5, 5)
+
 
 control_points = deform_control_points(control_points)
 pc = unit_plane_3d(num_points_per_axis=40)
