@@ -649,7 +649,8 @@ for i in range(4):
 steps for page generation:
     * just get barebones pages training and get a simple network that works
     * get pattern to match 
-    * look at distribution of pixel intensities and sample synthetic page intensities from measured distribution
+    * look at distribution of pixel intensities and sample synthetic page
+      intensities from measured distribution
     * measure intensity from papyrus
 """
 
