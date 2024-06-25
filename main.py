@@ -10,10 +10,6 @@ TODO
     taking some kernel and conving * the intesnsity to get the modified image
     (so it's a smooth transform)
 * maybe making the distance interpolate over triangle indices would speed things up?
-  * speed up generation of masks
-    * almost all the time is turning meshes to volume
-  * move nrrd stuff into classes -- getting hard to read
-    * maybe move util functions into separate file
   * start getting intensity mapping for regions so the synthetic pages look more realistic
   * think about how to verify training in stages
     * raw unet with permutation layer, synthetic data only, no texture-mapping
