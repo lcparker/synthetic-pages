@@ -62,7 +62,7 @@ from matplotlib.axes import Axes
 from scipy.spatial.transform import Rotation
 from typing import TypeVar
 
-type Point2D = tuple[float, float]
+Point2D = tuple[float, float]
 
 class BoundingBox2D:
     def __init__(self, min: Point2D, max: Point2D):
@@ -621,7 +621,7 @@ def save_labelmap(labelmap: np.ndarray, filename: str) -> None:
     header = {
         'type': 'int',
         'dimension': 3,
-        'sizes': labels.shape,
+        'sizes': labelmap.shape,
         'space': 'left-posterior-superior',
         'kinds': ['domain', 'domain', 'domain'],
         'endian': 'little',
@@ -636,11 +636,12 @@ def save_labelmap(labelmap: np.ndarray, filename: str) -> None:
 import nrrd
 from pathlib import Path
 from typing import Self
+
 class Nrrd:
     def __init__(self, volume: np.ndarray, metadata) -> None:
         if len(volume.shape) != 3: raise ValueError("Nrrd volume must have shape (H, W, D)")
         self.__is_valid_metadata(metadata)
-        if not np.all(volume.shape == metadata['sizes']):
+        if not np.all(np.array(volume.shape) == metadata['sizes']):
             raise ValueError("Can't create nrrd object: volume shape does not match metadata")
         self.volume = volume
         self.metadata = metadata
@@ -665,8 +666,7 @@ class Nrrd:
     def __is_valid_metadata(self, metadata) -> None:
         # TODO fill this out properly
         keys = metadata.keys()
-        if not (
-                'type' in keys
+        if not ('type' in keys
                 or not 'dimension' in keys
                 or not 'space' in keys 
                 or not metadata['space'] == 'left-posterior-superior'
@@ -679,8 +679,7 @@ class Nrrd:
                 or not metadata['encoding'] in ['raw', 'gzip']
                 or not 'space origin' in keys
                 or not isinstance(metadata['space origin'], np.ndarray)
-                or not len(metadata['space origin']) == 3
-                ):
+                or not len(metadata['space origin']) == 3):
             raise ValueError("Can't create nrrd object: invalid metadata")
 
     @staticmethod
@@ -691,7 +690,9 @@ class Nrrd:
     def write(self, filename: str | Path) -> None:
         nrrd.write(file = str(filename), data = self.volume, header = self.metadata)
 
-    
+    def to_onehot(self):
+        # TODO
+        pass
 
 # mask = mesh_to_3d_page(mesh, bbox3d)
 
@@ -829,6 +830,7 @@ def deform_control_points(control_points: np.ndarray) -> np.ndarray:
         ])
     return control_points + adjustments
 
+
 volume_bbox = BoundingBox3D((0,0,0), (1,1,1))
 control_points = volume_bbox.to_grid(5, 5, 5)
 
@@ -838,12 +840,12 @@ pc = unit_plane_3d(num_points_per_axis=40)
 planes = [HomogeneousTransform.translation(0,0,z).apply(pc) for z in np.linspace(0,1,10)]
 deformed_planes = [bezier_space_deformation(control_points, plane) for plane in planes]
 print(f'no overlaps?: {control_points_well_ordered(control_points)}')
-fig, ax = plot_point_cloud(control_points.reshape(-1, 3))
+# fig, ax = plot_point_cloud(control_points.reshape(-1, 3))
 # plt.show()
 meshes = [Mesh(dp, triangulate_pointcloud(pc).triangles) for dp in deformed_planes]
-for mesh in meshes:
-    fig, ax = mesh.scene_with_mesh_in_it(fig=fig, ax=ax)
+# for mesh in meshes:
+#     fig, ax = mesh.scene_with_mesh_in_it(fig=fig, ax=ax)
 
 # plt.show()
-labels = page_meshes_to_volume(meshes, 128, .1, volume_bbox)
-save_labelmap(labels, 'labels.nrrd')
+# labels = page_meshes_to_volume(meshes, 128, .1, volume_bbox)
+# save_labelmap(labels, 'labels.nrrd')
