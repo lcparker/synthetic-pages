@@ -69,6 +69,15 @@ def grep_volume_from_directory(directory: str | Path) -> Nrrd:
     else:
         raise ValueError("Supplied folder does not contain a volume object")
 
+def grep_labels_from_directory(directory: str | Path) -> Nrrd:
+    files = [p for p in Path(directory).iterdir() if p.name.startswith('mask') and p.suffix == '.nrrd']
+    if len(files) > 0:
+        volume_file = files[0]
+        volume = Nrrd.from_file(volume_file)
+        return volume
+    else:
+        raise ValueError("Supplied folder does not contain a volume object")
+
 def view_distributions_in_directory(directory: str | Path):
     xs = np.linspace(0,100000, 1000)
     for p in [p for p in Path('hari-cubes/cube_0_2408_4560/').iterdir() if p.suffix == '.pkl']:
@@ -77,7 +86,7 @@ def view_distributions_in_directory(directory: str | Path):
     plt.show()
 
 def make_synthetic_page_volume(data_folder: str | Path = 'hari-cubes/cube_0_2408_4560/', 
-                               save_filename: str | None = None):
+                               save_filename: str | None = None) -> tuple[Nrrd, Nrrd]:
     ground_truth_volume = grep_volume_from_directory(data_folder)
     if not len(set(ground_truth_volume.metadata['sizes'])) == 1:
         raise ValueError(f"Currently, only cubic volumes are supported, but size was {ground_truth_volume.metadata['sizes']}")
@@ -98,9 +107,13 @@ def make_synthetic_page_volume(data_folder: str | Path = 'hari-cubes/cube_0_2408
 
     synthetic_volume = Nrrd(synthetic_volume, ground_truth_volume.metadata)
     if save_filename:
-        save_path = Path(data_folder)/save_filename
-        print(f"Saving volume to {save_path}")
-        synthetic_volume.write(save_path)
+        volume_save_path = Path(data_folder)/('volume-' + save_filename)
+        labels_save_path = Path(data_folder)/('mask-' + save_filename)
+        print(f"Saving volume to {volume_save_path} and labels to {labels_save_path}")
+        synthetic_volume.write(volume_save_path)
+        labels_ground_truth = grep_labels_from_directory(data_folder)
+        labels = Nrrd(labels, labels_ground_truth.metadata)
+        labels.write(labels_save_path)
 
-    return synthetic_volume
+    return synthetic_volume, labels
 
