@@ -4,28 +4,15 @@ Generate synthetic pages using bezier surfaces
 The pages should be non-overlapping. 
 
 TODO
-* how do you generate realistic crumples for pages st they're not all just the
-  exact same? and don't intersect?
-    -> i think this is easy using randomly initialised gaussian heatmaps and
-    taking some kernel and conving * the intesnsity to get the modified image
-    (so it's a smooth transform)
-* maybe making the distance interpolate over triangle indices would speed things up?
-  * start getting intensity mapping for regions so the synthetic pages look more realistic
-  * think about how to verify training in stages
-    * raw unet with permutation layer, synthetic data only, no texture-mapping
-    * raw unet with permutation layer, synthetic data only, yes texture-mapping
-    * pretrained (air-papyrus) unet with permutation layer, synthetic data only, no texture mapping
-        * hypothesis: it won't be much better, maybe worse, relative to raw unet
-    * pretrained (air-papyrus) unet with permutation layer, synthetic data only, yes texture mapping
-    * raw instance-unet, synthetic texture-mapped training, test on manual layer data
-    * pretrained instance-unet, synthetic texture-mapped training, test on manual layer data
-
-LATER
-* generate synthetic N-page blocks en masse for training
-* one way to get realistic page shapes is to take already-segmented regions and
-  register a synthetic page to them. then, we can use those registered control
-  points as starter points to tesselate pages
-* based on pretraining results, try texture matching to improve generalisation
+* start getting intensity mapping for regions so the synthetic pages look more realistic
+* think about how to verify training in stages
+  * raw unet with permutation layer, synthetic data only, no texture-mapping
+  * raw unet with permutation layer, synthetic data only, yes texture-mapping
+  * pretrained (air-papyrus) unet with permutation layer, synthetic data only, no texture mapping
+      * hypothesis: it won't be much better, maybe worse, relative to raw unet
+  * pretrained (air-papyrus) unet with permutation layer, synthetic data only, yes texture mapping
+  * raw instance-unet, synthetic texture-mapped training, test on manual layer data
+  * pretrained instance-unet, synthetic texture-mapped training, test on manual layer data
 
 REGISTRATION
 *** do this later if at all. it's very difficult to come up with a
@@ -42,15 +29,7 @@ differentiable way to fit synthetically generated pages to real data ***
 
 
 My thoughts
-* generate N straight pages (planes) oriented in a random direction in the
-  scene
-* distort with control points
-* apply random local distortions/variations as like a masked kernel 
-* is it possible/feasible to generate the pages by hand manually adjusting the
-  control points in 3d to deform the whole space, then getting the (u,v,w)
-  coordinates of each point on the plane and deforming that (so there's a heatmap
-  over the whole volume that you scale the kernel with, identity most places
-  except where there are local variations)
+* apply random local distortions/variations as like a masked kernel (gaussian over whole volume and then hadamard, but can only do transforms that can also be applied to the mask)
 
 """
 
