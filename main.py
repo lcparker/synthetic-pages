@@ -2,35 +2,6 @@
 Generate synthetic pages using bezier surfaces
 
 The pages should be non-overlapping. 
-
-TODO
-* start getting intensity mapping for regions so the synthetic pages look more realistic
-* think about how to verify training in stages
-  * raw unet with permutation layer, synthetic data only, no texture-mapping
-  * raw unet with permutation layer, synthetic data only, yes texture-mapping
-  * pretrained (air-papyrus) unet with permutation layer, synthetic data only, no texture mapping
-      * hypothesis: it won't be much better, maybe worse, relative to raw unet
-  * pretrained (air-papyrus) unet with permutation layer, synthetic data only, yes texture mapping
-  * raw instance-unet, synthetic texture-mapped training, test on manual layer data
-  * pretrained instance-unet, synthetic texture-mapped training, test on manual layer data
-
-REGISTRATION
-*** do this later if at all. it's very difficult to come up with a
-differentiable way to fit synthetically generated pages to real data *** 
-* get already-segmented meshes
-* overlay/ crop to volumes
-* initialise unit 3d grid of control points
-* frame it as an optimisation problem (with regularisation) to minimise the
-  distances between generated mesh and the actual one
-* get adjusted control points
-* use those as starting points (deform randomly/add noise) to try and train on
-  a super-distribution of the page overlap style
-* can generate synthetic pages based on that
-
-
-My thoughts
-* apply random local distortions/variations as like a masked kernel (gaussian over whole volume and then hadamard, but can only do transforms that can also be applied to the mask)
-
 """
 
 from math import comb
