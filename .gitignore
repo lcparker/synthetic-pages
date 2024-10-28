@@ -1,3 +1,5 @@
 venv/
 *.nrrd
 *.nii
+
+__pycache__
