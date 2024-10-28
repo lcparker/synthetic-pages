@@ -13,6 +13,8 @@ from scipy.spatial.transform import Rotation
 from typing import TypeVar
 
 Point2D = tuple[float, float]
+Point3D = tuple[float, float, float]
+Indices3D = tuple[int, int, int]
 
 class BoundingBox2D:
     def __init__(self, min: Point2D, max: Point2D):
