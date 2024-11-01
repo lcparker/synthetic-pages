@@ -9,7 +9,7 @@ import copy
 
 def densely_subsample(
     input_volume: Nrrd,
-    output_volume_size: Union[Point3D, Tuple[int, int, int]] = (256, 256, 256),
+    output_volume_size: Union[Point3D, Indices3D] = (256, 256, 256),
     samples: int = 8,
 ) -> List[Nrrd]:
     """
@@ -38,8 +38,6 @@ def densely_subsample(
     result_nrrds = []
     space_directions = np.array(input_volume.metadata['space directions'])
     original_origin = np.array(input_volume.metadata['space origin'])
-    
-    attempts = 0
     
     while len(result_nrrds) < samples:
         # Generate random starting position
@@ -76,7 +74,6 @@ def densely_subsample(
         
         # Create new Nrrd object
         result_nrrds.append(Nrrd(subvolume, new_metadata))
-        attempts += 1
     
     return result_nrrds
 
