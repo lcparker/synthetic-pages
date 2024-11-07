@@ -10,6 +10,8 @@ def get_device():
     from torch.cuda import is_available as cuda_is_available
 
     device = device("cuda" if cuda_is_available() else "cpu")
+    logging.getLogger(__name__).info(f"Using device: {device}")
+    return device
 
 
 def make_network(weights_path: str | Path | None = None) -> UNet:
@@ -67,10 +69,10 @@ def make_network(weights_path: str | Path | None = None) -> UNet:
     nn.init.constant_(new_output_conv[1].bias, 0.0)
     nn.init.constant_(new_output_conv[2].bias, 0.0)
 
-    network.model[2].conv = new_output_conv.cuda()  # type: ignore
+    network.model[2].conv = new_output_conv.to(device)  # type: ignore
 
     if weights_path:
-        network.load_state_dict(torch.load(weights_path))
+        network.load_state_dict(torch.load(weights_path, weights_only=True, map_location=device))
     else:
         from scrolls.weights_init import InitWeights_He
 
