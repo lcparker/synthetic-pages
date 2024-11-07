@@ -86,8 +86,62 @@ def process_directory_nrrds(directory_path):
     
     return segmentation_nodes
 
- 
-def show_segmentation_3d(segmentation_node, closed_surface=True, smoothing_factor=0.5):
+def create_colormap(max_id=32, colormap_name=None):  # colormap_name kept for compatibility
+    """
+    Create a colormap for segments using a curated set of visually distinct colors
+    
+    Parameters:
+    max_id: int, maximum segment ID number to create colors for
+    colormap_name: str, ignored (kept for compatibility)
+    
+    Returns:
+    Dictionary mapping segment IDs to RGB colors as (r,g,b) tuples
+    """
+    # Curated color palette - values in RGB (0-1 range)
+    base_colors = [
+        (0.8941, 0.1020, 0.1098),  # Coral Red
+        (0.2157, 0.4941, 0.7216),  # Steel Blue
+        (0.3019, 0.6863, 0.2902),  # Forest Green
+        (0.5961, 0.3059, 0.6392),  # Amethyst Purple
+        (1.0000, 0.4980, 0.0000),  # Orange
+        (0.2275, 0.7294, 0.6235),  # Turquoise
+        (0.9059, 0.5412, 0.7647),  # Rose Pink
+        (0.4000, 0.6510, 0.1176),  # Apple Green
+        (0.9412, 0.8941, 0.2588),  # Sunshine Yellow
+        (0.3373, 0.7059, 0.9137),  # Sky Blue
+        (0.8392, 0.3765, 0.3020),  # Salmon
+        (0.4941, 0.3137, 0.6510),  # Royal Purple
+        (0.6235, 0.6000, 0.4392),  # Warm Gray
+        (0.3176, 0.4784, 0.2078),  # Olive Green
+        (0.8431, 0.6275, 0.3098)   # Golden Brown
+    ]
+    
+    # Create color dictionary
+    colors = {}
+    num_base_colors = len(base_colors)
+    
+    for i in range(max_id + 1):
+        if i < num_base_colors:
+            # Use base colors for first set of segments
+            colors[i] = base_colors[i]
+        else:
+            # For additional segments, create variations of base colors
+            base_idx = i % num_base_colors
+            variation = (i // num_base_colors) + 1
+            
+            # Create a slightly different shade of the base color
+            r, g, b = base_colors[base_idx]
+            # Adjust brightness and saturation based on variation
+            factor = 1.0 / (1.0 + variation * 0.3)
+            colors[i] = (
+                max(0.1, min(1.0, r * factor)),
+                max(0.1, min(1.0, g * factor)),
+                max(0.1, min(1.0, b * factor))
+            )
+    
+    return colors
+
+def show_segmentation_3d(segmentation_node, closed_surface=True, smoothing_factor=0.5, colormap_name='jet'):
     """
     Convert a segmentation to 3D mesh visualization
     
@@ -120,22 +174,21 @@ def show_segmentation_3d(segmentation_node, closed_surface=True, smoothing_facto
     # Set 3D view parameters
     display_node.SetPreferredDisplayRepresentationName3D("Closed surface")
     
-    # Apply smoothing
     segmentation = segmentation_node.GetSegmentation()
-    for segment_index in range(segmentation.GetNumberOfSegments()):
+    n_segments = segmentation.GetNumberOfSegments()
+    colors = create_colormap()
+    # Apply colors and settings to each segment
+    for segment_index in range(n_segments):
         segment_id = segmentation.GetNthSegmentID(segment_index)
+        segment = segmentation.GetSegment(segment_id)
+        # Set color for this segment
+        r, g, b = colors[int(segment_id)]
+        segment.SetColor(r, g, b)
+        
         display_node.SetSegmentOpacity3D(segment_id, 1.0)  # Full opacity
         # Set smoothing factor (0 = no smoothing, 1 = maximum smoothing)
         if hasattr(display_node, 'SetSegmentSmoothingFactor'):
             display_node.SetSegmentSmoothingFactor(segment_id, smoothing_factor)
-    
-    # Get/Create a 3D view
-    layout_manager = slicer.app.layoutManager()
-    layout_manager.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUp3DView)  # Switch to 3D view
-    view_node = layout_manager.threeDWidget(0).mrmlViewNode()
-    
-    # Center the 3D view on the segmentation
-    slicer.util.resetThreeDViews()
 
 def show_all_segmentations_3d(smoothing_factor=0.5):
     """
@@ -160,3 +213,12 @@ def show_all_segmentations_3d(smoothing_factor=0.5):
     
     print("Conversion complete!")
 
+
+def display_segmentations_from_folder(directory: str, max_num_segmentations=20):
+    directory = str(directory)
+    segmentation_nodes = process_directory_nrrds(directory)
+    for i, (_, node) in enumerate(segmentation_nodes.items()):
+        if i > max_num_segmentations:
+            return
+        else:
+            show_segmentation_3d(node)
