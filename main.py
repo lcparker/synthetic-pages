@@ -70,85 +70,7 @@ def bezier_3d(control_points: np.ndarray, p: np.ndarray) -> np.ndarray:
     return pts # (N, 3)
 
 import vtk
-class Mesh:
-    def __init__(self, points, triangles):
-        assert points.shape[-1] == 3
-        assert len(points.shape) == 2
-        assert triangles.shape[-1] == 3
-        assert len(triangles.shape) == 2
-
-        self.points = points
-        self.triangles = triangles
-
-    def show_wireframe(self):
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(111, projection='3d')
-
-        for triangle in self.triangles:
-            closed_triangle = np.append(triangle, triangle[0])  # To close the triangle
-            ax.plot(self.points[closed_triangle, 0], 
-                    self.points[closed_triangle, 1], 
-                    self.points[closed_triangle, 2], 'k-')
-
-        ax.plot(self.points[..., 0], self.points[..., 1], self.points[..., 2], 'o', markersize=5, color='red')
-
-        ax.set_title('3D Mesh with Delaunay Triangulation')
-        ax.set_xlabel('X-axis')
-        ax.set_ylabel('Y-axis')
-        plt.show()
-
-    def scene_with_mesh_in_it(self, fig=None, ax=None) -> tuple[Figure, Axes]:
-        fig = plt.figure(figsize=(10, 8)) if fig is None else fig
-        ax = fig.add_subplot(111, projection='3d') if ax is None else ax
-
-        x = self.points[:, 0]
-        y = self.points[:, 1]
-        z = self.points[:, 2]
-
-        ax.plot_trisurf(x, y, self.triangles, z, cmap='viridis', lw=1, edgecolor='none')
-
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        ax.set_title('3D Mesh with Filled Surface')
-
-        return fig, ax
-
-    def show(self, fig=None, ax=None):
-        fig = plt.figure(figsize=(10, 8)) if fig is None else fig
-        ax = fig.add_subplot(111, projection='3d') if ax is None else ax
-
-        x = self.points[:, 0]
-        y = self.points[:, 1]
-        z = self.points[:, 2]
-
-        ax.plot_trisurf(x, y, self.triangles, z, cmap='viridis', lw=1, edgecolor='none')
-
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        ax.set_title('3D Mesh with Filled Surface')
-
-        plt.show()
-
-    def to_polydata(self) -> vtk.vtkPolyData:
-        # This could become a bottleneck if we do this for very large meshes
-        points = vtk.vtkPoints()
-        for point in mesh.points:
-            points.InsertNextPoint(point)
-        
-        triangles = vtk.vtkCellArray()
-        for triangle in mesh.triangles:
-            tri = vtk.vtkTriangle()
-            for i in range(3):
-                tri.GetPointIds().SetId(i, triangle[i])
-            triangles.InsertNextCell(tri)
-        
-        polydata = vtk.vtkPolyData()
-        polydata.SetPoints(points)
-        polydata.SetPolys(triangles)
-
-        return polydata
+from mesh import Mesh
 
 def triangulate_pointcloud(pointcloud: np.ndarray) -> Mesh:
     """
@@ -367,7 +289,8 @@ def run_transform_tests():
     suite = unittest.TestLoader().loadTestsFromTestCase(TestHomogeneousTransform)
     unittest.TextTestRunner().run(suite)
 
-run_transform_tests()
+if __name__ == '__main__':
+    run_transform_tests()
 
 ###############################
 
@@ -591,13 +514,14 @@ from nrrd_file import *
 # mask_mesh = mask_to_mesh(mask)
 # mask_mesh.show()
 
-### EXAMPLE CODE ### 
-n = 4
-m = 6
+if __name__ == "__main__":
+    ### EXAMPLE CODE ### 
+    n = 4
+    m = 6
 
-# generate control points in unit grid
-bbox = BoundingBox2D((0,0), (1,1)) 
-volume_bbox = BoundingBox3D((0,0,0), (1,1,1))
+    # generate control points in unit grid
+    bbox = BoundingBox2D((0,0), (1,1)) 
+    volume_bbox = BoundingBox3D((0,0,0), (1,1,1))
 
 """
 for i in range(4):
@@ -723,21 +647,22 @@ def deform_control_points(control_points: np.ndarray) -> np.ndarray:
     return control_points + adjustments
 
 
-volume_bbox = BoundingBox3D((0,0,0), (1,1,1))
-control_points = volume_bbox.to_grid(5, 5, 5)
+if __name__ == "__main__":
+    volume_bbox = BoundingBox3D((0,0,0), (1,1,1))
+    control_points = volume_bbox.to_grid(5, 5, 5)
 
 
-control_points = deform_control_points(control_points)
-pc = unit_plane_3d(num_points_per_axis=40)
-planes = [HomogeneousTransform.translation(0,0,z).apply(pc) for z in np.linspace(0,1,10)]
-deformed_planes = [bezier_space_deformation(control_points, plane) for plane in planes]
-print(f'no overlaps?: {control_points_well_ordered(control_points)}')
-# fig, ax = plot_point_cloud(control_points.reshape(-1, 3))
-# plt.show()
-meshes = [Mesh(dp, triangulate_pointcloud(pc).triangles) for dp in deformed_planes]
-# for mesh in meshes:
-#     fig, ax = mesh.scene_with_mesh_in_it(fig=fig, ax=ax)
+    control_points = deform_control_points(control_points)
+    pc = unit_plane_3d(num_points_per_axis=40)
+    planes = [HomogeneousTransform.translation(0,0,z).apply(pc) for z in np.linspace(0,1,10)]
+    deformed_planes = [bezier_space_deformation(control_points, plane) for plane in planes]
+    print(f'no overlaps?: {control_points_well_ordered(control_points)}')
+    # fig, ax = plot_point_cloud(control_points.reshape(-1, 3))
+    # plt.show()
+    meshes = [Mesh(dp, triangulate_pointcloud(pc).triangles) for dp in deformed_planes]
+    # for mesh in meshes:
+    #     fig, ax = mesh.scene_with_mesh_in_it(fig=fig, ax=ax)
 
-# plt.show()
-# labels = page_meshes_to_volume(meshes, 128, .1, volume_bbox)
-# save_labelmap(labels, 'labels.nrrd')
+    # plt.show()
+    # labels = page_meshes_to_volume(meshes, 128, .1, volume_bbox)
+    # save_labelmap(labels, 'labels.nrrd')
