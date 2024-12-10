@@ -69,7 +69,7 @@ class Nrrd:
                [0., 0., 1.]]),
           'endian': 'little',
           'encoding': 'gzip',
-          'space origin': np.array([cube.z, cube.y, cube.x]).astype(float)
+          'space origin': np.array([cube.x, cube.y, cube.z]).astype(float)
                 }
         return Nrrd(volume, metadata)
 
