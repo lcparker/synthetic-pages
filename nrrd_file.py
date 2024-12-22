@@ -1,7 +1,6 @@
 import nrrd
-from vesuvius import Cube
 from pathlib import Path
-from typing import Self
+from typing import Self, Literal
 
 import numpy as np
 
@@ -51,12 +50,17 @@ class Nrrd:
             raise ValueError("Can't create nrrd object: invalid metadata")
 
     @staticmethod
-    def from_file(file: str | Path):
-        volume, metadata = nrrd.read(str(file))
+    def from_file(file: str | Path, index_order: Literal["F", "C"] = "F"):
+        volume, metadata = nrrd.read(str(file), index_order = index_order)
         return Nrrd(volume, metadata)
 
     @staticmethod
-    def from_cube(cube: Cube, mask = True):
+    def from_cube(cube, mask = True):
+        """
+        Imports a Cube object from the vesvius repo.
+
+        No type hinting or direct import because importing the repo is slow.
+        """
         volume = cube.mask if mask else cube.volume
         metadata = {
           'type': 'int64',
@@ -69,12 +73,12 @@ class Nrrd:
                [0., 0., 1.]]),
           'endian': 'little',
           'encoding': 'gzip',
-          'space origin': np.array([cube.x, cube.y, cube.z]).astype(float)
+          'space origin': np.array([cube.z, cube.y, cube.x]).astype(float)
                 }
         return Nrrd(volume, metadata)
 
-    def write(self, filename: str | Path) -> None:
-        nrrd.write(file = str(filename), data = self.volume, header = self.metadata)
+    def write(self, filename: str | Path, index_order: Literal["F", "C"] = "F") -> None:
+        nrrd.write(file = str(filename), data = self.volume, header = self.metadata, index_order=index_order)
 
     def to_onehot(self):
         # TODO
