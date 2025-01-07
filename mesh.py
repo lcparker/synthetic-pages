@@ -75,11 +75,11 @@ class Mesh:
     def to_polydata(self) -> vtk.vtkPolyData:
         # This could become a bottleneck if we do this for very large meshes
         points = vtk.vtkPoints()
-        for point in mesh.points:
+        for point in self.points:
             points.InsertNextPoint(point)
         
         triangles = vtk.vtkCellArray()
-        for triangle in mesh.triangles:
+        for triangle in self.triangles:
             tri = vtk.vtkTriangle()
             for i in range(3):
                 tri.GetPointIds().SetId(i, triangle[i])
@@ -133,7 +133,7 @@ class Mesh:
                             yield values[0], values[1:]
 
     @staticmethod
-    def from_obj(file_path: Path | str) -> Self:
+    def from_obj(file_path: Path | str) -> 'Mesh':
         """
         Read a mesh from an OBJ file using streaming.
         
