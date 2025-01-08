@@ -1,4 +1,5 @@
 from pathlib import Path
+from dataclasses import dataclass
 import sys
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout,
                             QHBoxLayout, QWidget, QDialog, QLabel, QFileDialog, QListWidget, QListWidgetItem, QShortcut, QSizePolicy)
@@ -8,7 +9,6 @@ import vtk
 from PyQt5.QtCore import Qt
 from nrrd_file import Nrrd
 from vtkmodules.util.numpy_support import numpy_to_vtk
-import numpy as np
 from match_stitches import match_stitches
 
 class LoadSegmentationDialog(QDialog):
@@ -17,46 +17,12 @@ class LoadSegmentationDialog(QDialog):
         self.setWindowTitle("Load Segmentation")
         self.setModal(True)
         
-        # Create layout
         layout = QVBoxLayout(self)
         
-        # Name section
-        name_widget = QWidget()
-        name_layout = QHBoxLayout(name_widget)
-        self.name_label = QLabel("Name:")
-        self.name_input = QLabel("Segmentation " + str(parent.next_seg_id))
-        name_layout.addWidget(self.name_label)
-        name_layout.addWidget(self.name_input)
-        layout.addWidget(name_widget)
-        
-        # Volume section (optional)
-        volume_widget = QWidget()
-        volume_layout = QHBoxLayout(volume_widget)
-        self.volume_label = QLabel("(Optional) No volume selected")
-        volume_button = QPushButton("Select Volume")
-        volume_button.setAutoDefault(False)
-        volume_button.setDefault(False)
-        volume_button.clicked.connect(self.select_volume)
-        volume_layout.addWidget(self.volume_label)
-        volume_layout.addWidget(volume_button)
-        layout.addWidget(volume_widget)
-        
-        # Mask section
-        mask_widget = QWidget()
-        mask_layout = QHBoxLayout(mask_widget)
-        self.mask_label = QLabel("No mask selected")
-        mask_button = QPushButton("Select Mask")
-        mask_button.setAutoDefault(False)
-        mask_button.setDefault(False)
-        mask_button.clicked.connect(self.select_mask)
-        mask_layout.addWidget(self.mask_label)
-        mask_layout.addWidget(mask_button)
-        layout.addWidget(mask_widget)
-        
-        # Load button
-        load_button = QPushButton("Load")
-        load_button.clicked.connect(self.accept)
-        layout.addWidget(load_button)
+        self.__add_name_widget(layout, str(parent.next_seg_id))
+        self.__add_volume_section(layout)
+        self.__add_mask_section(layout)
+        self.__add_load_button(layout)
         
         self.volume_path = None
         self.mask_path = None
@@ -73,13 +39,59 @@ class LoadSegmentationDialog(QDialog):
             self.mask_path = path
             self.mask_label.setText(path.split('/')[-1])
 
+    def __add_name_widget(self, layout, segmentation_id):
+        name_widget = QWidget()
+        name_layout = QHBoxLayout(name_widget)
+        self.name_label = QLabel("Name:")
+        self.name_input = QLabel("Segmentation " + str(segmentation_id))
+        name_layout.addWidget(self.name_label)
+        name_layout.addWidget(self.name_input)
+        layout.addWidget(name_widget)
+
+    def __add_volume_section(self, layout):
+        volume_widget = QWidget()
+        volume_layout = QHBoxLayout(volume_widget)
+        self.volume_label = QLabel("(Optional) No volume selected")
+        volume_button = QPushButton("Select Volume")
+        volume_button.setAutoDefault(False)
+        volume_button.setDefault(False)
+        volume_button.clicked.connect(self.select_volume)
+        volume_layout.addWidget(self.volume_label)
+        volume_layout.addWidget(volume_button)
+        layout.addWidget(volume_widget)
+
+    def __add_mask_section(self, layout):
+        mask_widget = QWidget()
+        mask_layout = QHBoxLayout(mask_widget)
+        self.mask_label = QLabel("No mask selected")
+        mask_button = QPushButton("Select Mask")
+        mask_button.setAutoDefault(False)
+        mask_button.setDefault(False)
+        mask_button.clicked.connect(self.select_mask)
+        mask_layout.addWidget(self.mask_label)
+        mask_layout.addWidget(mask_button)
+        layout.addWidget(mask_widget)
+
+    def __add_load_button(self, layout):
+        load_button = QPushButton("Load")
+        load_button.clicked.connect(self.accept)
+        layout.addWidget(load_button)
+
+@dataclass
+class Segmentation:
+    name: str 
+    volume: Nrrd | None
+    masks: list[Nrrd]
+    volume_actor: vtk.vtkVolume | None
+    visible: bool
+
+
 class MainWindow(QMainWindow):
+    segmentations: list[Segmentation] = []
+
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
         self.next_seg_id = 1
-        
-        # Store loaded segmentations as list of dicts
-        self.segmentations = []
         
         # Matching state
         self.matching_state = None  # Can be None, 'selecting_giver', or 'selecting_receiver'
@@ -89,35 +101,8 @@ class MainWindow(QMainWindow):
         self.central_widget = QWidget()
         main_layout = QHBoxLayout(self.central_widget)
         
-        # Create left panel for controls
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
         
-        # Create load segmentation button
-        self.load_seg_btn = QPushButton("Load Segmentation")
-        self.load_seg_btn.clicked.connect(self.show_load_dialog)
-        left_layout.addWidget(self.load_seg_btn)
-
-        self.load_multiple_btn = QPushButton("Load Multiple Masks")
-        self.load_multiple_btn.clicked.connect(self.load_multiple_masks)
-        left_layout.addWidget(self.load_multiple_btn)
-        
-        # Create list of loaded segmentations
-        self.seg_list = QListWidget()
-        self.seg_list.itemChanged.connect(lambda _: self.update_visualization(False))  # For checkbox changes
-        left_layout.addWidget(self.seg_list)
- 
-        # Save segmentations button
-        self.save_all_btn = QPushButton("Save Updated Segmentations")
-        self.save_all_btn.clicked.connect(self.save_modified_segmentations)
-        self.save_all_btn.setEnabled(False)
-        left_layout.addWidget(self.save_all_btn)
-
-        # Create match labels button
-        self.match_btn = QPushButton("Match Labels")
-        self.match_btn.clicked.connect(self.start_matching)
-        left_layout.addWidget(self.match_btn)
-        
+        left_panel = self.__create_left_panel()
         main_layout.addWidget(left_panel)
         
         # Create the VTK widget
@@ -152,6 +137,39 @@ class MainWindow(QMainWindow):
 
         self.quit_shortcut = QShortcut(QKeySequence('q'), self)
         self.quit_shortcut.activated.connect(self.close_application)
+
+
+    def __create_left_panel(self) -> QWidget:
+        # Create left panel for controls
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        
+        # Create load segmentation button
+        self.load_seg_btn = QPushButton("Load Segmentation")
+        self.load_seg_btn.clicked.connect(self.show_load_dialog)
+        left_layout.addWidget(self.load_seg_btn)
+
+        self.load_multiple_btn = QPushButton("Load Multiple Masks")
+        self.load_multiple_btn.clicked.connect(self.load_multiple_masks)
+        left_layout.addWidget(self.load_multiple_btn)
+        
+        # Create list of loaded segmentations
+        self.seg_list = QListWidget()
+        self.seg_list.itemChanged.connect(lambda _: self.update_visualization(False))  # For checkbox changes
+        left_layout.addWidget(self.seg_list)
+ 
+        # Save segmentations button
+        self.save_all_btn = QPushButton("Save Updated Segmentations")
+        self.save_all_btn.clicked.connect(self.save_modified_segmentations)
+        self.save_all_btn.setEnabled(False)
+        left_layout.addWidget(self.save_all_btn)
+
+        # Create match labels button
+        self.match_btn = QPushButton("Match Labels")
+        self.match_btn.clicked.connect(self.start_matching)
+        left_layout.addWidget(self.match_btn)
+
+        return left_panel
 
     def close_application(self):
         self.close()
@@ -264,17 +282,15 @@ class MainWindow(QMainWindow):
 
     def load_segmentation(self, name, volume_path, mask_path):
         try:
-            # Load nrrd files
             mask = Nrrd.from_file(mask_path)
-            new_seg = {
-                'name': name,
-                'volume': Nrrd.from_file(volume_path) if volume_path else None,
-                'mask_history': [mask],  # List of masks, first one is original
-                'volume_actor': None,
-                'visible': True
-            }
+            new_segmentation = Segmentation(
+                    name, 
+                    Nrrd.from_file(volume_path) if volume_path else None,
+                    [mask],
+                    None,
+                    True)
             
-            self.segmentations.append(new_seg)
+            self.segmentations.append(new_segmentation)
  
             # Create list item with checkbox
             item = QListWidgetItem(name)
@@ -301,7 +317,7 @@ class MainWindow(QMainWindow):
 
     def save_modified_segmentations(self):
         # Check if any segmentations have modifications
-        has_modifications = any(len(seg['mask_history']) > 1 for seg in self.segmentations)
+        has_modifications = any(len(seg.masks) > 1 for seg in self.segmentations)
         
         if not has_modifications:
             print("No modifications to save")
@@ -318,16 +334,16 @@ class MainWindow(QMainWindow):
                 saved_count = 0
                 
                 for seg in self.segmentations:
-                    if len(seg['mask_history']) > 1:  # Has modifications
+                    if len(seg.masks) > 1:  # Has modifications
                         # Extract coordinates from name
-                        name = seg['name']
+                        name = seg.name
                         coords = name.replace("Seg (", "").replace(")", "").split(", ")
                         z, y, x = coords
                         
                         # Save most recent modification
                         new_filename = f"{z}_{y}_{x}_mask.nrrd"
                         save_path = save_dir / new_filename
-                        seg['mask_history'][-1].write(str(save_path))
+                        seg.masks[-1].write(str(save_path))
                         saved_count += 1
                 
                 print(f"Successfully saved {saved_count} modified segmentations to {save_dir}")
@@ -350,7 +366,7 @@ class MainWindow(QMainWindow):
             # Find which segmentation was picked among visible ones
             picked_seg = None
             for seg in self.segmentations:
-                if seg['visible'] and seg.get('volume_actor') == picked_volume:
+                if seg.visible and seg.volume_actor == picked_volume:
                     picked_seg = seg
                     break
             
@@ -365,9 +381,9 @@ class MainWindow(QMainWindow):
                         return
                     
                     try:
-                        updated_seg = match_stitches(self.giver_selected['mask_history'][-1], 
-                                                   picked_seg['mask_history'][-1])
-                        picked_seg['mask_history'].append(updated_seg)
+                        updated_seg = match_stitches(self.giver_selected.masks[-1], 
+                                                   picked_seg.masks[-1])
+                        picked_seg.masks.append(updated_seg)
                         self.save_all_btn.setEnabled(True)
                         print("Successfully matched labels")
                     except Exception as e:
@@ -380,38 +396,32 @@ class MainWindow(QMainWindow):
                 self.update_visualization()
 
     def update_visualization(self, reset_camera=False):
-        # Clear existing actors
         self.renderer.RemoveAllViewProps()
         
-        # Update visibility flags from checkboxes
         for i in range(self.seg_list.count()):
             item = self.seg_list.item(i)
-            self.segmentations[i]['visible'] = (item.checkState() == Qt.Checked)
+            self.segmentations[i].visible = (item.checkState() == Qt.Checked)
         
-        # Visualize all visible segmentations
-        for seg in self.segmentations:
-            if seg['visible']:
-                self.visualize_segmentation(seg)
+        for segmentation in self.segmentations:
+            if segmentation.visible:
+                segmentation.volume_actor = self.wrap_segmentation_in_actor(segmentation)
+                self.renderer.AddVolume(segmentation.volume_actor)
             
-        # Only reset camera when explicitly requested
         if reset_camera:
             self.renderer.ResetCamera()
             
         self.vtk_widget.GetRenderWindow().Render()
 
 
-    def visualize_segmentation(self, segmentation):
-        # Get mask data and metadata
+    def wrap_segmentation_in_actor(self, segmentation: Segmentation) -> vtk.vtkVolume:
         # Convert from NRRD standard ordering (ZYX) to VTK's expected ordering (XYZ)
-        mask_data = segmentation['mask_history'][-1].volume.T
-        metadata = segmentation['mask_history'][-1].metadata
+        mask_data = segmentation.masks[-1].volume.T
+        metadata = segmentation.masks[-1].metadata
         
-        # Convert numpy array to VTK image data
         vtk_data = vtk.vtkImageData()
         vtk_data.SetDimensions(mask_data.shape)
         vtk_data.AllocateScalars(vtk.VTK_UNSIGNED_CHAR, 1)
         
-        # Flatten the numpy array and convert to VTK array
         vtk_array = numpy_to_vtk(mask_data.flatten(), deep=True)
         vtk_data.GetPointData().GetScalars().DeepCopy(vtk_array)
 
@@ -431,63 +441,36 @@ class MainWindow(QMainWindow):
         else:
             color_tf = self.color_map
         
-        # Create opacity transfer function
         opacity_tf = vtk.vtkPiecewiseFunction()
         opacity_tf.AddPoint(0, 0.0)  # Air is transparent
-        opacity_tf.AddPoint(1, 1.0)  # All other indices semi-transparent
+        opacity_tf.AddPoint(1, 1.0)
         
-        # Create volume property
         volume_property = vtk.vtkVolumeProperty()
         volume_property.SetColor(color_tf)
         volume_property.SetScalarOpacity(opacity_tf)
         volume_property.ShadeOn()
         
-        # Create volume mapper
         mapper = vtk.vtkSmartVolumeMapper()
         mapper.SetInputData(vtk_data)
         
-        # Create volume actor
         volume = vtk.vtkVolume()
         volume.SetMapper(mapper)
         volume.SetProperty(volume_property)
         
-        # Set the position and orientation using metadata
         matrix = vtk.vtkMatrix4x4()
-        
-        # Set rotation from space directions
         space_directions = metadata['space directions']
         for i in range(3):
             for j in range(3):
                 matrix.SetElement(i, j, space_directions[i][j])
         
-        # Set translation from space origin
         space_origin = metadata['space origin']
         for i in range(3):
             matrix.SetElement(i, 3, space_origin[i])
         
-        # Apply transformation to volume
         volume.SetUserMatrix(matrix)
-        
-        # Store volume actor reference
-        segmentation['volume_actor'] = volume
-        
-        # Add to renderer
-        self.renderer.AddVolume(volume)
 
-    def hsv_to_rgb(self, h, s, v):
-        if s == 0.0: return (v, v, v)
-        i = int(h * 6.0)
-        f = (h * 6.0) - i
-        p = v * (1.0 - s)
-        q = v * (1.0 - s * f)
-        t = v * (1.0 - s * (1.0 - f))
-        i = i % 6
-        if i == 0: return (v, t, p)
-        if i == 1: return (q, v, p)
-        if i == 2: return (p, v, t)
-        if i == 3: return (p, q, v)
-        if i == 4: return (t, p, v)
-        if i == 5: return (v, p, q)
+        return volume
+        
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
