@@ -268,7 +268,6 @@ class MainWindow(QMainWindow):
 
         return left_panel
 
-
     def toggle_volume_visibility(self, item):
         idx = self.segmentation_visibility_list.row(item)
         is_visible = item.checkState() == Qt.CheckState.Checked
@@ -298,7 +297,7 @@ class MainWindow(QMainWindow):
             print("Cancelled matching")
             self.update_visualization()
 
-    def update_checkboxes(self):
+    def update_checkboxes(self): 
         self.segmentation_visibility_list.clear()
         for s in self.segmentation_manager.segmentations:
                 item = QListWidgetItem(s.name)
