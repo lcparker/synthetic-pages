@@ -118,24 +118,77 @@ class SegmentationManager:
         return len(self.model.segmentations)
 
 class SegmentationVisualizer:
-    def __init__(self, renderer: vtk.vtkRenderer):
+    def __init__(self, renderer: vtk.vtkRenderer, segmentation_manager: SegmentationManager):
         self.renderer = renderer
+        self.segmentation_manager = segmentation_manager
         self.color_map = self.initialize_color_map()
 
     def visualize_segmentation(self, segmentation, state=None):
         pass
 
+    def update_visualization(self, reset_camera=False):
+        self.renderer.RemoveAllViewProps()
+        
+        for segmentation in self.segmentation_manager.segmentations:
+            if segmentation.visible:
+                segmentation.volume_actor = self.wrap_segmentation_in_actor(segmentation)
+                self.renderer.AddVolume(segmentation.volume_actor)
+            
+        if reset_camera:
+            self.renderer.ResetCamera()
+            
+        self.renderer.GetRenderWindow().Render()
 
-    def update_visibility(self, segmentation_name, visible):
-        pass
+    def wrap_segmentation_in_actor(self, segmentation: Segmentation) -> vtk.vtkVolume:
+        # Convert from NRRD standard ordering (ZYX) to VTK's expected ordering (XYZ)
+        mask_data = segmentation.masks[-1].volume.T
+        metadata = segmentation.masks[-1].metadata
+        
+        vtk_data = vtk.vtkImageData()
+        vtk_data.SetDimensions(mask_data.shape)
+        vtk_data.AllocateScalars(vtk.VTK_UNSIGNED_CHAR, 1)
+        
+        vtk_array = numpy_to_vtk(mask_data.flatten(), deep=True)
+        vtk_data.GetPointData().GetScalars().DeepCopy(vtk_array)
+        color_tf = self.color_map
+        
+        opacity_tf = vtk.vtkPiecewiseFunction()
+        opacity_tf.AddPoint(0, 0.0)  # Air is transparent
+        opacity_tf.AddPoint(1, 1.0)
+        
+        volume_property = vtk.vtkVolumeProperty()
+        volume_property.SetColor(color_tf)
+        volume_property.SetScalarOpacity(opacity_tf)
+        volume_property.ShadeOn()
+        
+        mapper = vtk.vtkSmartVolumeMapper()
+        mapper.SetInputData(vtk_data)
+        
+        volume = vtk.vtkVolume()
+        volume.SetMapper(mapper)
+        volume.SetProperty(volume_property)
+        
+        matrix = vtk.vtkMatrix4x4()
+        space_directions = metadata['space directions']
+        for i in range(3):
+            for j in range(3):
+                matrix.SetElement(i, j, space_directions[i][j])
+        
+        space_origin = metadata['space origin']
+        for i in range(3):
+            matrix.SetElement(i, 3, space_origin[i])
+        
+        volume.SetUserMatrix(matrix)
+
+        return volume
 
 
-    def initialize_color_map(self):
+    def initialize_color_map(self) -> vtk.vtkColorTransferFunction:
         """Create a consistent color mapping using the curated color set"""
-        self.color_map = vtk.vtkColorTransferFunction()
+        color_map = vtk.vtkColorTransferFunction()
         
         # Make 0 (air) black/transparent
-        self.color_map.AddRGBPoint(0, 0, 0, 0)
+        color_map.AddRGBPoint(0, 0, 0, 0)
         
         # Curated color palette - values in RGB (0-1 range)
         base_colors = [
@@ -176,7 +229,9 @@ class SegmentationVisualizer:
                 g = max(0.1, min(1.0, g * factor))
                 b = max(0.1, min(1.0, b * factor))
             
-            self.color_map.AddRGBPoint(i, r, g, b)
+            color_map.AddRGBPoint(i, r, g, b)
+
+        return color_map
 
 class MainWindow(QMainWindow):
     segmentation_manager: SegmentationManager
@@ -207,7 +262,7 @@ class MainWindow(QMainWindow):
         self.vtk_widget.GetRenderWindow().AddRenderer(self.renderer)
         self.iren = self.vtk_widget.GetRenderWindow().GetInteractor()
 
-        self.visualizer = SegmentationVisualizer(self.renderer)
+        self.visualizer = SegmentationVisualizer(self.renderer, self.segmentation_manager)
         
         # Set up picker
         self.picker = vtk.vtkCellPicker()
@@ -223,10 +278,6 @@ class MainWindow(QMainWindow):
         self.show()
         self.iren.Initialize()
 
-        # Initialize color map
-        self.color_map = None
-        self.initialize_color_map()
-
         self.quit_shortcut = QShortcut(QKeySequence('q'), self)
         self.quit_shortcut.activated.connect(self.close_application)
 
@@ -241,11 +292,6 @@ class MainWindow(QMainWindow):
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         
-        # # Create load segmentation button
-        # self.load_seg_btn = QPushButton("Load Segmentation")
-        # self.load_seg_btn.clicked.connect(self.show_load_dialog)
-        # left_layout.addWidget(self.load_seg_btn)
-
         self.load_multiple_btn = QPushButton("Load Multiple Masks")
         self.load_multiple_btn.clicked.connect(self.load_multiple_masks)
         left_layout.addWidget(self.load_multiple_btn)
@@ -272,7 +318,7 @@ class MainWindow(QMainWindow):
         idx = self.segmentation_visibility_list.row(item)
         is_visible = item.checkState() == Qt.CheckState.Checked
         self.segmentation_manager.get_segmentation_by_index(idx).visible = is_visible
-        self.update_visualization(False)
+        self.visualizer.update_visualization(False)
 
     def load_multiple_masks(self):
         files, _ = QFileDialog.getOpenFileNames(
@@ -285,7 +331,7 @@ class MainWindow(QMainWindow):
             self.segmentation_manager.load_segmentations(files)
         finally:
             self.update_checkboxes()
-            self.update_visualization(reset_camera=True)
+            self.visualizer.update_visualization(reset_camera=True)
 
     def update_checkboxes(self): 
         self.segmentation_visibility_list.clear()
@@ -314,7 +360,7 @@ class MainWindow(QMainWindow):
         
         self.matching_state = 'selecting_giver'
         print("Select giver volume (will be highlighted in green)")
-        self.update_visualization()
+        self.visualizer.update_visualization()
 
     def on_click(self, obj, event):
         if self.matching_state is None:
@@ -357,80 +403,7 @@ class MainWindow(QMainWindow):
                     self.matching_state = None
                     self.giver_selected = None
                 
-                self.update_visualization()
-
-    def update_visualization(self, reset_camera=False):
-        self.renderer.RemoveAllViewProps()
-        
-        for segmentation in self.segmentation_manager.segmentations:
-            if segmentation.visible:
-                segmentation.volume_actor = self.wrap_segmentation_in_actor(segmentation)
-                self.renderer.AddVolume(segmentation.volume_actor)
-            
-        if reset_camera:
-            self.renderer.ResetCamera()
-            
-        self.vtk_widget.GetRenderWindow().Render()
-
-
-    def wrap_segmentation_in_actor(self, segmentation: Segmentation) -> vtk.vtkVolume:
-        # Convert from NRRD standard ordering (ZYX) to VTK's expected ordering (XYZ)
-        mask_data = segmentation.masks[-1].volume.T
-        metadata = segmentation.masks[-1].metadata
-        
-        vtk_data = vtk.vtkImageData()
-        vtk_data.SetDimensions(mask_data.shape)
-        vtk_data.AllocateScalars(vtk.VTK_UNSIGNED_CHAR, 1)
-        
-        vtk_array = numpy_to_vtk(mask_data.flatten(), deep=True)
-        vtk_data.GetPointData().GetScalars().DeepCopy(vtk_array)
-
-        # # Create color transfer function based on state
-        # if self.matching_state == 'selecting_giver':
-        #     color_tf = vtk.vtkColorTransferFunction()
-        #     for i in range(32):
-        #         color_tf.AddRGBPoint(i, 0.7, 1.0, 0.7)  # Light green
-        # elif self.matching_state == 'selecting_receiver':
-        #     color_tf = vtk.vtkColorTransferFunction()
-        #     if segmentation == self.giver_selected:
-        #         for i in range(32):
-        #             color_tf.AddRGBPoint(i, 0.0, 1.0, 0.0)  # Bright green
-        #     else:
-        #         for i in range(32):
-        #             color_tf.AddRGBPoint(i, 1.0, 0.7, 0.7)  # Light red
-        # else:
-        #     color_tf = self.color_map
-        color_tf = self.color_map
-        
-        opacity_tf = vtk.vtkPiecewiseFunction()
-        opacity_tf.AddPoint(0, 0.0)  # Air is transparent
-        opacity_tf.AddPoint(1, 1.0)
-        
-        volume_property = vtk.vtkVolumeProperty()
-        volume_property.SetColor(color_tf)
-        volume_property.SetScalarOpacity(opacity_tf)
-        volume_property.ShadeOn()
-        
-        mapper = vtk.vtkSmartVolumeMapper()
-        mapper.SetInputData(vtk_data)
-        
-        volume = vtk.vtkVolume()
-        volume.SetMapper(mapper)
-        volume.SetProperty(volume_property)
-        
-        matrix = vtk.vtkMatrix4x4()
-        space_directions = metadata['space directions']
-        for i in range(3):
-            for j in range(3):
-                matrix.SetElement(i, j, space_directions[i][j])
-        
-        space_origin = metadata['space origin']
-        for i in range(3):
-            matrix.SetElement(i, 3, space_origin[i])
-        
-        volume.SetUserMatrix(matrix)
-
-        return volume
+                self.visualizer.update_visualization()
 
     def keypress_callback(self, obj, event):
         key = obj.GetKeySym().lower()
@@ -445,54 +418,6 @@ class MainWindow(QMainWindow):
     def close_application(self):
         self.close()
         QApplication.quit()
-
-    def initialize_color_map(self):
-        """Create a consistent color mapping using the curated color set"""
-        self.color_map = vtk.vtkColorTransferFunction()
-        
-        # Make 0 (air) black/transparent
-        self.color_map.AddRGBPoint(0, 0, 0, 0)
-        
-        # Curated color palette - values in RGB (0-1 range)
-        base_colors = [
-            (0.8941, 0.1020, 0.1098),  # Coral Red
-            (0.2157, 0.4941, 0.7216),  # Steel Blue
-            (0.3019, 0.6863, 0.2902),  # Forest Green
-            (0.5961, 0.3059, 0.6392),  # Amethyst Purple
-            (1.0000, 0.4980, 0.0000),  # Orange
-            (0.2275, 0.7294, 0.6235),  # Turquoise
-            (0.9059, 0.5412, 0.7647),  # Rose Pink
-            (0.4000, 0.6510, 0.1176),  # Apple Green
-            (0.9412, 0.8941, 0.2588),  # Sunshine Yellow
-            (0.3373, 0.7059, 0.9137),  # Sky Blue
-            (0.8392, 0.3765, 0.3020),  # Salmon
-            (0.4941, 0.3137, 0.6510),  # Royal Purple
-            (0.6235, 0.6000, 0.4392),  # Warm Gray
-            (0.3176, 0.4784, 0.2078),  # Olive Green
-            (0.8431, 0.6275, 0.3098)   # Golden Brown
-        ]
-        
-        num_base_colors = len(base_colors)
-        
-        # Add colors to the transfer function
-        for i in range(1, 32):  # 1-31 for non-air segments
-            if i < num_base_colors:
-                # Use base colors for first set of segments
-                r, g, b = base_colors[i]
-            else:
-                # For additional segments, create variations of base colors
-                base_idx = i % num_base_colors
-                variation = (i // num_base_colors) + 1
-                
-                # Create a slightly different shade of the base color
-                r, g, b = base_colors[base_idx]
-                # Adjust brightness and saturation based on variation
-                factor = 1.0 / (1.0 + variation * 0.3)
-                r = max(0.1, min(1.0, r * factor))
-                g = max(0.1, min(1.0, g * factor))
-                b = max(0.1, min(1.0, b * factor))
-            
-            self.color_map.AddRGBPoint(i, r, g, b)
 
 
 if __name__ == "__main__":
