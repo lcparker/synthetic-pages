@@ -305,24 +305,6 @@ class MainWindow(QMainWindow):
                 item.setCheckState(Qt.Checked if s.visible else Qt.Unchecked)
                 self.segmentation_visibility_list.addItem(item)
 
-    # def show_load_dialog(self):
-    #     dialog = LoadSegmentationDialog(self)
-    #     if dialog.exec_() == QDialog.Accepted:
-    #         if dialog.mask_path:  # Only check for mask path
-    #             name = dialog.name_input.text()
-    #             self.segmentation_manager.load_segmentation(name, dialog.volume_path, dialog.mask_path)
-
-    #             # Create list item with checkbox
-    #             item = QListWidgetItem(name)
-    #             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-    #             item.setCheckState(Qt.Checked)
-    #             self.segmentation_visibility_list.addItem(item)
-    #             
-    #             print(f"Successfully loaded mask for {name}")
-    #             self.update_visualization(reset_camera=True)
-    #         else:
-    #             print("Please select a mask file")
-
 
     def start_matching(self):
         if self.segmentation_manager.number_of_segmentations() < 2:
@@ -513,74 +495,6 @@ class MainWindow(QMainWindow):
             
             self.color_map.AddRGBPoint(i, r, g, b)
 
-
-class LoadSegmentationDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Load Segmentation")
-        self.setModal(True)
-        
-        layout = QVBoxLayout(self)
-        
-        self.__add_name_widget(layout, str(parent.next_seg_id))
-        self.__add_volume_section(layout)
-        self.__add_mask_section(layout)
-        self.__add_load_button(layout)
-        
-        self.volume_path = None
-        self.mask_path = None
-
-    def select_volume(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Select Volume File", filter="NRRD files (*.nrrd)")
-        if path:
-            self.volume_path = path
-            self.volume_label.setText(path.split('/')[-1])
-
-    def select_mask(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Select Mask File", filter="NRRD files (*.nrrd)")
-        if path:
-            self.mask_path = path
-            self.mask_label.setText(path.split('/')[-1])
-
-    def __add_name_widget(self, layout, segmentation_id):
-        name_widget = QWidget()
-        name_layout = QHBoxLayout(name_widget)
-        self.name_label = QLabel("Name:")
-        self.name_input = QLabel("Segmentation " + str(segmentation_id))
-        name_layout.addWidget(self.name_label)
-        name_layout.addWidget(self.name_input)
-        layout.addWidget(name_widget)
-
-    def __add_volume_section(self, layout):
-        volume_widget = QWidget()
-        volume_layout = QHBoxLayout(volume_widget)
-        self.volume_label = QLabel("(Optional) No volume selected")
-        volume_button = QPushButton("Select Volume")
-        volume_button.setAutoDefault(False)
-        volume_button.setDefault(False)
-        volume_button.clicked.connect(self.select_volume)
-        volume_layout.addWidget(self.volume_label)
-        volume_layout.addWidget(volume_button)
-        layout.addWidget(volume_widget)
-
-    def __add_mask_section(self, layout):
-        mask_widget = QWidget()
-        mask_layout = QHBoxLayout(mask_widget)
-        self.mask_label = QLabel("No mask selected")
-        mask_button = QPushButton("Select Mask")
-        mask_button.setAutoDefault(False)
-        mask_button.setDefault(False)
-        mask_button.clicked.connect(self.select_mask)
-        mask_layout.addWidget(self.mask_label)
-        mask_layout.addWidget(mask_button)
-        layout.addWidget(mask_widget)
-
-    def __add_load_button(self, layout):
-        load_button = QPushButton("Load")
-        load_button.clicked.connect(self.accept)
-        layout.addWidget(load_button)
-
-        
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
