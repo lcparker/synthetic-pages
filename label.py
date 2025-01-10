@@ -287,33 +287,13 @@ class MainWindow(QMainWindow):
             self.update_checkboxes()
             self.update_visualization(reset_camera=True)
 
-    def keypress_callback(self, obj, event):
-        key = obj.GetKeySym().lower()
-        if key == 'q':
-            self.close_application()
-        elif key == 'escape' and self.matching_state is not None:
-            self.matching_state = None
-            self.giver_selected = None
-            print("Cancelled matching")
-            self.update_visualization()
-
     def update_checkboxes(self): 
         self.segmentation_visibility_list.clear()
         for s in self.segmentation_manager.segmentations:
                 item = QListWidgetItem(s.name)
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-                item.setCheckState(Qt.Checked if s.visible else Qt.Unchecked)
+                item.setCheckState(Qt.CheckState.Checked if s.visible else Qt.CheckState.Unchecked)
                 self.segmentation_visibility_list.addItem(item)
-
-
-    def start_matching(self):
-        if self.segmentation_manager.number_of_segmentations() < 2:
-            print("Need at least 2 segmentations to match labels")
-            return
-        
-        self.matching_state = 'selecting_giver'
-        print("Select giver volume (will be highlighted in green)")
-        self.update_visualization()
 
     def save_modified_segmentations(self):
         if not self.segmentation_manager.has_modification():
@@ -327,6 +307,14 @@ class MainWindow(QMainWindow):
 
         self.segmentation_manager.save_updated_segmentations(Path(save_dir))
 
+    def start_matching(self):
+        if self.segmentation_manager.number_of_segmentations() < 2:
+            print("Need at least 2 segmentations to match labels")
+            return
+        
+        self.matching_state = 'selecting_giver'
+        print("Select giver volume (will be highlighted in green)")
+        self.update_visualization()
 
     def on_click(self, obj, event):
         if self.matching_state is None:
@@ -397,21 +385,22 @@ class MainWindow(QMainWindow):
         vtk_array = numpy_to_vtk(mask_data.flatten(), deep=True)
         vtk_data.GetPointData().GetScalars().DeepCopy(vtk_array)
 
-        # Create color transfer function based on state
-        if self.matching_state == 'selecting_giver':
-            color_tf = vtk.vtkColorTransferFunction()
-            for i in range(32):
-                color_tf.AddRGBPoint(i, 0.7, 1.0, 0.7)  # Light green
-        elif self.matching_state == 'selecting_receiver':
-            color_tf = vtk.vtkColorTransferFunction()
-            if segmentation == self.giver_selected:
-                for i in range(32):
-                    color_tf.AddRGBPoint(i, 0.0, 1.0, 0.0)  # Bright green
-            else:
-                for i in range(32):
-                    color_tf.AddRGBPoint(i, 1.0, 0.7, 0.7)  # Light red
-        else:
-            color_tf = self.color_map
+        # # Create color transfer function based on state
+        # if self.matching_state == 'selecting_giver':
+        #     color_tf = vtk.vtkColorTransferFunction()
+        #     for i in range(32):
+        #         color_tf.AddRGBPoint(i, 0.7, 1.0, 0.7)  # Light green
+        # elif self.matching_state == 'selecting_receiver':
+        #     color_tf = vtk.vtkColorTransferFunction()
+        #     if segmentation == self.giver_selected:
+        #         for i in range(32):
+        #             color_tf.AddRGBPoint(i, 0.0, 1.0, 0.0)  # Bright green
+        #     else:
+        #         for i in range(32):
+        #             color_tf.AddRGBPoint(i, 1.0, 0.7, 0.7)  # Light red
+        # else:
+        #     color_tf = self.color_map
+        color_tf = self.color_map
         
         opacity_tf = vtk.vtkPiecewiseFunction()
         opacity_tf.AddPoint(0, 0.0)  # Air is transparent
@@ -442,6 +431,16 @@ class MainWindow(QMainWindow):
         volume.SetUserMatrix(matrix)
 
         return volume
+
+    def keypress_callback(self, obj, event):
+        key = obj.GetKeySym().lower()
+        if key == 'q':
+            self.close_application()
+        elif key == 'escape' and self.matching_state is not None:
+            self.matching_state = None
+            self.giver_selected = None
+            print("Cancelled matching")
+            self.update_visualization()
 
     def close_application(self):
         self.close()
