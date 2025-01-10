@@ -361,19 +361,26 @@ class MainWindow(QMainWindow):
 
         self.visualizer = SegmentationVisualizer(self.renderer, self.segmentation_manager)
         
-        # Add click callback
         self.picking_handler  = PickingHandler(self.segmentation_manager, self.visualizer)
         self.iren.AddObserver("LeftButtonPressEvent", self.picking_handler.on_click)
         
-        # Set up keyboard interaction
-        self.iren.AddObserver('KeyPressEvent', self.keypress_callback)
+        self.setup_keypress_callbacks()
         
         self.setCentralWidget(self.central_widget)
         self.show()
         self.iren.Initialize()
 
+    def setup_keypress_callbacks(self):
+        self.iren.AddObserver('KeyPressEvent', self.keypress_callback)
+
         self.quit_shortcut = QShortcut(QKeySequence('q'), self)
         self.quit_shortcut.activated.connect(self.close_application)
+
+        self.load_shortcut = QShortcut(QKeySequence('l'), self)
+        self.load_shortcut.activated.connect(self.load_multiple_masks)
+
+        self.match_shortcut = QShortcut(QKeySequence('m'), self)
+        self.match_shortcut.activated.connect(self.toggle_label_matching)
 
     def __create_left_panel(self) -> QWidget:
         # Create left panel for controls
@@ -451,10 +458,13 @@ class MainWindow(QMainWindow):
         key = obj.GetKeySym().lower()
         if key == 'q':
             self.close_application()
-        elif key == 'escape' and self.matching_state is not None:
-            self.matching_state = None
-            self.giver_selected = None
+        elif key == 'l':
+            self.load_multiple_masks()
+        elif key == 'm':
+            self.toggle_label_matching()
+        elif key == 'escape':
             print("Cancelled matching")
+            self.picking_handler.deactivate()
             self.update_visualization()
 
     def close_application(self):
