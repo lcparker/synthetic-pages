@@ -52,6 +52,14 @@ class SegmentationManager:
             raise ValueError(f"No segmentation exists with index {idx}")
         return self.segmentations[idx]
 
+    def get_segmentation_by_actor(self, actor: vtk.vtkVolume | None) -> Segmentation | None:
+        if not actor:
+            return None
+        for seg in self.segmentations:
+            if seg.visible and seg.volume_actor == actor:
+                return seg
+
+        return None
 
     def load_segmentations(self, mask_filenames: list[str]) -> None:
         if mask_filenames:
@@ -233,8 +241,97 @@ class SegmentationVisualizer:
 
         return color_map
 
+
+from abc import ABC, abstractmethod
+class IHandlePick(ABC):
+    @abstractmethod
+    def on_click(self, obj, event):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def activate(self):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def deactivate(self):
+        raise NotImplementedError()
+
+class PickingHandler(IHandlePick):
+    picker: vtk.vtkCellPicker
+    segmentation_manager: SegmentationManager
+    visualizer: SegmentationVisualizer
+    giver_selected: Segmentation|None
+    active: bool
+
+    @property
+    def renderer(self) -> vtk.vtkRenderer:
+        return self.visualizer.renderer
+
+    @property
+    def render_window_interactor(self) -> vtk.vtkRenderWindowInteractor:
+        return self.renderer.GetRenderWindow().GetInteractor()
+
+    def __init__(self, segmentation_manager: SegmentationManager, visualizer: SegmentationVisualizer):
+        # Set up picker
+        self.giver_selected = None
+        self.picker = vtk.vtkCellPicker()
+        self.segmentation_manager = segmentation_manager
+        self.visualizer = visualizer
+        self.active = False
+
+    def activate(self):
+        self.visualizer.renderer.GetRenderWindow().GetInteractor().SetPicker(self.picker)
+        self.active=True
+
+    def deactivate(self):
+        self.visualizer.renderer.GetRenderWindow().GetInteractor().SetPicker(None)
+        self.active=False
+
+
+    def on_click(self, obj, event):
+        if not self.active:
+            return
+
+        click_pos = self.render_window_interactor.GetEventPosition()
+        pick = self.picker.Pick(click_pos[0], click_pos[1], 0, self.renderer)
+
+        if not pick:
+            return
+
+        picked_volume = self.picker.GetProp3D()
+        picked_segmentation = self.segmentation_manager.get_segmentation_by_actor(picked_volume)
+
+        if not picked_segmentation:
+            return
+        if not self.giver_selected:
+            self.giver_selected = picked_segmentation
+            return
+        elif picked_segmentation == self.giver_selected:
+            print("Cannot select same volume as giver and receiver")
+            self.giver_selected=None
+            return
+                
+        try:
+            if not self.giver_selected:
+                raise Exception("No giver segmentation was selected while trying to select receiver")
+            updated_segmentation = match_stitches(self.giver_selected.masks[-1], 
+                                       picked_segmentation.masks[-1])
+            picked_segmentation.masks.append(updated_segmentation)
+            print(f"Successfully matched labels {self.giver_selected.name} -> {picked_segmentation.name}")
+        except Exception as e:
+            print(f"Error matching labels: {str(e)}")
+        finally:
+            self.giver_selected = None
+        
+        self.visualizer.update_visualization()
+        
+
 class MainWindow(QMainWindow):
     segmentation_manager: SegmentationManager
+
+    @property
+    def next_seg_id(self) -> int:
+        return self.segmentation_manager.number_of_segmentations() + 1
 
     def __init__(self, parent=None, segmentation_manager = SegmentationManager()):
         super(MainWindow, self).__init__(parent)
@@ -264,12 +361,9 @@ class MainWindow(QMainWindow):
 
         self.visualizer = SegmentationVisualizer(self.renderer, self.segmentation_manager)
         
-        # Set up picker
-        self.picker = vtk.vtkCellPicker()
-        self.iren.SetPicker(self.picker)
-        
         # Add click callback
-        self.iren.AddObserver("LeftButtonPressEvent", self.on_click)
+        self.picking_handler  = PickingHandler(self.segmentation_manager, self.visualizer)
+        self.iren.AddObserver("LeftButtonPressEvent", self.picking_handler.on_click)
         
         # Set up keyboard interaction
         self.iren.AddObserver('KeyPressEvent', self.keypress_callback)
@@ -280,12 +374,6 @@ class MainWindow(QMainWindow):
 
         self.quit_shortcut = QShortcut(QKeySequence('q'), self)
         self.quit_shortcut.activated.connect(self.close_application)
-
-
-    @property
-    def next_seg_id(self) -> int:
-        return self.segmentation_manager.number_of_segmentations() + 1
-
 
     def __create_left_panel(self) -> QWidget:
         # Create left panel for controls
@@ -309,10 +397,16 @@ class MainWindow(QMainWindow):
 
         # Create match labels button
         self.match_btn = QPushButton("Match Labels")
-        self.match_btn.clicked.connect(self.start_matching)
+        self.match_btn.clicked.connect(lambda: self.toggle_label_matching())
         left_layout.addWidget(self.match_btn)
 
         return left_panel
+
+    def toggle_label_matching(self):
+        if self.picking_handler.active:
+            self.picking_handler.deactivate()
+        else:
+            self.picking_handler.activate()
 
     def toggle_volume_visibility(self, item):
         idx = self.segmentation_visibility_list.row(item)
@@ -352,58 +446,6 @@ class MainWindow(QMainWindow):
         )
 
         self.segmentation_manager.save_updated_segmentations(Path(save_dir))
-
-    def start_matching(self):
-        if self.segmentation_manager.number_of_segmentations() < 2:
-            print("Need at least 2 segmentations to match labels")
-            return
-        
-        self.matching_state = 'selecting_giver'
-        print("Select giver volume (will be highlighted in green)")
-        self.visualizer.update_visualization()
-
-    def on_click(self, obj, event):
-        if self.matching_state is None:
-            return
-
-        # Get click position
-        click_pos = self.iren.GetEventPosition()
-        
-        # Perform pick
-        if self.picker.Pick(click_pos[0], click_pos[1], 0, self.renderer):
-            picked_volume = self.picker.GetProp3D()
-            
-            # Find which segmentation was picked among visible ones
-            picked_seg = None
-            for seg in self.segmentation_manager.segmentations:
-                if seg.visible and seg.volume_actor == picked_volume:
-                    picked_seg = seg
-                    break
-            
-            if picked_seg:
-                if self.matching_state == 'selecting_giver':
-                    self.giver_selected = picked_seg
-                    self.matching_state = 'selecting_receiver'
-                    print("Now select receiver volume (will be highlighted in red)")
-                elif self.matching_state == 'selecting_receiver':
-                    if picked_seg == self.giver_selected:
-                        print("Cannot select same volume as giver and receiver")
-                        return
-                    
-                    try:
-                        updated_seg = match_stitches(self.giver_selected.masks[-1], 
-                                                   picked_seg.masks[-1])
-                        picked_seg.masks.append(updated_seg)
-                        self.save_all_btn.setEnabled(True)
-                        print("Successfully matched labels")
-                    except Exception as e:
-                        print(f"Error matching labels: {str(e)}")
-
-                    # Reset state
-                    self.matching_state = None
-                    self.giver_selected = None
-                
-                self.visualizer.update_visualization()
 
     def keypress_callback(self, obj, event):
         key = obj.GetKeySym().lower()
