@@ -477,8 +477,6 @@ some papers on differentiable assignment (related to classifying instances)
 
 
 """
-# load mask from file
-import nrrd
 from skimage.transform import resize
 tim_mask = nrrd.read('mask.nrrd')
 tim_mask = np.pad(resize(tim_mask[0], (16, 16, 16)), 1)
@@ -509,16 +507,8 @@ def save_labelmap(labelmap: np.ndarray, filename: str) -> None:
     nrrd.write(filename, labelmap, header)
 
 from nrrd_file import *
-# mask = mesh_to_3d_page(mesh, bbox3d)
-
-# mask_mesh = mask_to_mesh(mask)
-# mask_mesh.show()
 
 if __name__ == "__main__":
-    ### EXAMPLE CODE ### 
-    n = 4
-    m = 6
-
     # generate control points in unit grid
     bbox = BoundingBox2D((0,0), (1,1)) 
     volume_bbox = BoundingBox3D((0,0,0), (1,1,1))
@@ -660,9 +650,10 @@ if __name__ == "__main__":
     # fig, ax = plot_point_cloud(control_points.reshape(-1, 3))
     # plt.show()
     meshes = [Mesh(dp, triangulate_pointcloud(pc).triangles) for dp in deformed_planes]
-    # for mesh in meshes:
-    #     fig, ax = mesh.scene_with_mesh_in_it(fig=fig, ax=ax)
+    fig, ax = meshes[0].scene_with_mesh_in_it()
+    for mesh in meshes[1:]:
+        fig, ax = mesh.scene_with_mesh_in_it(fig=fig, ax=ax)
 
-    # plt.show()
-    # labels = page_meshes_to_volume(meshes, 128, .1, volume_bbox)
-    # save_labelmap(labels, 'labels.nrrd')
+    plt.show()
+    labels = page_meshes_to_volume(meshes, 128, .1, volume_bbox)
+    save_labelmap(labels, 'labels.nrrd')
