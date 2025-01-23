@@ -1,4 +1,4 @@
-This repository is home to the code I'm developing as part of working on the [vesuvius challenge](scrollprize.org).
+This repository is home to the code I'm working on as part of the [vesuvius challenge](scrollprize.org).
 
 Here, you will find:
 * Base classes that wrap useful functionality from other libraries, such as `Mesh` and `Nrrd`
