@@ -19,10 +19,8 @@ class Segmentation:
     volume_actor: vtk.vtkVolume | None
     visible: bool
 
-
 class Model:
     segmentations: list[Segmentation] = []
-
 
 class SegmentationManager:
     model: Model
@@ -52,7 +50,7 @@ class SegmentationManager:
             raise ValueError(f"No segmentation exists with index {idx}")
         return self.segmentations[idx]
 
-    def get_segmentation_by_actor(self, actor: vtk.vtkVolume | None) -> Segmentation | None:
+    def get_segmentation_by_actor(self, actor: vtk.vtkProp3D | vtk.vtkActor | None) -> Segmentation | None:
         if not actor:
             return None
         for seg in self.segmentations:
@@ -162,7 +160,7 @@ class SegmentationVisualizer:
         
         opacity_tf = vtk.vtkPiecewiseFunction()
         opacity_tf.AddPoint(0, 0.0)  # Air is transparent
-        opacity_tf.AddPoint(1, 1.0)
+        opacity_tf.AddPoint(1, 0.8)
         
         volume_property = vtk.vtkVolumeProperty()
         volume_property.SetColor(color_tf)
@@ -324,8 +322,180 @@ class PickingHandler(IHandlePick):
             self.giver_selected = None
         
         self.visualizer.update_visualization()
-        
 
+
+import numpy as np
+class LayerPickingHandler(IHandlePick):
+    def __init__(self, segmentation_manager: SegmentationManager, visualizer: SegmentationVisualizer):
+        self.picker = vtk.vtkCellPicker()
+        self.segmentation_manager = segmentation_manager
+        self.visualizer = visualizer
+        self.active = False
+        self.original_nrrds = {}
+        
+    def traverse_ray_dda(self, start_indices, ray_dir, volume):
+        position = np.array(start_indices, dtype=np.float64)
+        step = ray_dir / np.linalg.norm(ray_dir)  # Normalize step size
+        step /=2
+        
+        z_dim, y_dim, x_dim = volume.shape
+        max_steps = int(np.ceil(np.sqrt(x_dim*x_dim + y_dim*y_dim + z_dim*z_dim)))
+        for _ in range(max_steps):
+            x,y,z = np.round(position).astype(int)
+            
+            if (0 <= x < x_dim and 0 <= y < y_dim and 0 <= z < z_dim):
+                value = volume[x, y, z]
+                # world_point = self.volume_to_world_coords((x, y, z), volume_matrix)
+                print(f"value at ({x}, {y}, {z}) is {value}")
+                if value > 0:
+                    return (x, y, z), value
+                    
+            position += step
+            
+            # Check if we're completely outside the volume
+            if np.any(position < 0) or np.any(position >= np.array([x_dim, y_dim, z_dim])):
+                break
+                
+        return None, None
+
+    @property
+    def renderer(self) -> vtk.vtkRenderer:
+        return self.visualizer.renderer
+
+    @property
+    def render_window_interactor(self) -> vtk.vtkRenderWindowInteractor:
+        return self.renderer.GetRenderWindow().GetInteractor()
+
+    def activate(self):
+        self.render_window_interactor.SetPicker(self.picker)
+        self.active = True
+        print("Layer picking active - click to isolate a layer")
+
+    def deactivate(self):
+        for seg_id, original_nrrd in self.original_nrrds.items():
+            for seg in self.segmentation_manager.segmentations:
+                if seg.name == seg_id:
+                    seg.masks[-1] = original_nrrd
+                    break
+        self.original_nrrds.clear()
+        self.render_window_interactor.SetPicker(None)
+        self.active = False
+        self.visualizer.update_visualization()
+        print("Layer picking deactivated - restored original view")
+
+    def on_click(self, obj, event):
+        if not self.active:
+            return
+
+        click_pos = self.render_window_interactor.GetEventPosition()
+        pick = self.picker.Pick(click_pos[0], click_pos[1], 0, self.renderer)
+
+        if not pick:
+            return
+
+        picked_volume = self.picker.GetProp3D()
+        picked_segmentation = self.segmentation_manager.get_segmentation_by_actor(picked_volume)
+
+        if not picked_segmentation:
+            return
+
+        # Get camera position and picked position in world coordinates
+        camera = self.renderer.GetActiveCamera()
+        camera_pos = camera.GetPosition()
+        picked_position = self.picker.GetPickPosition()
+
+        # Calculate a point far along the ray for visualization
+        direction = np.array(picked_position) - np.array(camera_pos)
+        direction = direction / np.linalg.norm(direction)
+
+        current_nrrd = picked_segmentation.masks[-1]
+        mask_volume = current_nrrd.volume
+        volume_matrix = picked_volume.GetUserMatrix()
+
+        try:
+            # Get indices of picked point first
+            picked_indices = self.world_to_volume_coords(picked_position, volume_matrix)
+            x, y, z = np.round(picked_indices).astype(int)
+            
+            dir_end = np.array(picked_position) + direction
+            dir_end_volume = self.world_to_volume_coords(dir_end, volume_matrix)
+            direction_volume = np.array(dir_end_volume) - np.array(picked_indices)
+            direction_volume = direction_volume / np.linalg.norm(direction_volume)
+
+            if 0 <= x < mask_volume.shape[2] and 0 <= y < mask_volume.shape[1] and 0 <= z < mask_volume.shape[0]:
+                value = mask_volume[x, y, z]
+                print(f"Value at picked point: {value}")
+                
+                if value == 0:
+                    print("Initial pick point is in air, traversing ray...")
+                    indices, value = self.traverse_ray_dda(picked_indices, direction_volume, mask_volume)
+                    
+                    if indices is not None:
+                        print(f"Found non-zero value {value} at position {indices}")
+                        
+                        if picked_segmentation.name not in self.original_nrrds:
+                            self.original_nrrds[picked_segmentation.name] = current_nrrd
+                        
+                        # Create a new volume showing only the selected layer
+                        new_volume = np.zeros_like(mask_volume)
+                        new_volume[mask_volume == value] = value
+                        picked_segmentation.masks[-1] = Nrrd(new_volume, current_nrrd.metadata.copy())
+                        self.visualizer.update_visualization()
+                    else:
+                        print("No non-zero value found along ray")
+                else:
+                    self.visualizer.update_visualization()
+                    print(f"Found non-zero value {value} at initial pick point")
+
+        except Exception as e:
+            print(f"Error checking picked point: {e}")
+
+    def world_to_volume_coords(self, point, volume_matrix):
+        inverse_matrix = vtk.vtkMatrix4x4()
+        vtk.vtkMatrix4x4.Invert(volume_matrix, inverse_matrix)
+        p = list(point) + [1.0]
+        res = [0, 0, 0, 0]
+        inverse_matrix.MultiplyPoint(p, res)
+        return res[:3]
+
+    
+    def volume_to_world_coords(self, point, volume_matrix):
+        p = list(point) + [1.0]
+        res = [0, 0, 0, 0]
+        volume_matrix.MultiplyPoint(p, res)
+        return res[:3]
+
+
+class PickingInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
+    def __init__(self):
+        self.picking_enabled = False
+        
+    def OnLeftButtonDown(self, obj, event):
+        if not self.picking_enabled:
+            super().OnLeftButtonDown(obj, event)
+            
+    def OnLeftButtonUp(self, obj, event):
+        if not self.picking_enabled:
+            super().OnLeftButtonUp(obj, event)
+            
+    def OnMouseMove(self, obj, event):
+        if not self.picking_enabled:
+            super().OnMouseMove(obj, event)
+            
+    def OnMouseWheelForward(self, obj, event):
+        if not self.picking_enabled:
+            super().OnMouseWheelForward(obj, event)
+            
+    def OnMouseWheelBackward(self, obj, event):
+        if not self.picking_enabled:
+            super().OnMouseWheelBackward(obj, event)
+            
+    def EnablePicking(self):
+        self.picking_enabled = True
+        
+    def DisablePicking(self):
+        self.picking_enabled = False
+        
 class MainWindow(QMainWindow):
     segmentation_manager: SegmentationManager
 
@@ -336,10 +506,6 @@ class MainWindow(QMainWindow):
     def __init__(self, parent=None, segmentation_manager = SegmentationManager()):
         super(MainWindow, self).__init__(parent)
         self.segmentation_manager = segmentation_manager
-        
-        # Matching state
-        self.matching_state = None  # Can be None, 'selecting_giver', or 'selecting_receiver'
-        self.giver_selected = None
         
         # Create main layout
         self.central_widget = QWidget()
@@ -359,10 +525,17 @@ class MainWindow(QMainWindow):
         self.vtk_widget.GetRenderWindow().AddRenderer(self.renderer)
         self.iren = self.vtk_widget.GetRenderWindow().GetInteractor()
 
+
+        style = PickingInteractorStyle()
+        style.SetDefaultRenderer(self.renderer)
+        self.iren.SetInteractorStyle(style)
+
+
         self.visualizer = SegmentationVisualizer(self.renderer, self.segmentation_manager)
         
         self.picking_handler  = PickingHandler(self.segmentation_manager, self.visualizer)
-        self.iren.AddObserver("LeftButtonPressEvent", self.picking_handler.on_click)
+        self.layer_picking_handler = LayerPickingHandler(self.segmentation_manager, self.visualizer)
+        self.iren.AddObserver("LeftButtonPressEvent", self.handle_click)
         
         self.setup_keypress_callbacks()
         
@@ -381,6 +554,10 @@ class MainWindow(QMainWindow):
 
         self.match_shortcut = QShortcut(QKeySequence('m'), self)
         self.match_shortcut.activated.connect(self.toggle_label_matching)
+
+        self.layer_pick_shortcut = QShortcut(QKeySequence('p'), self)
+        self.layer_pick_shortcut.activated.connect(self.toggle_layer_picking)
+
 
     def __create_left_panel(self) -> QWidget:
         # Create left panel for controls
@@ -407,13 +584,39 @@ class MainWindow(QMainWindow):
         self.match_btn.clicked.connect(lambda: self.toggle_label_matching())
         left_layout.addWidget(self.match_btn)
 
+        self.layer_pick_btn = QPushButton("Pick Layer")
+        self.layer_pick_btn.clicked.connect(self.toggle_layer_picking)
+        left_layout.addWidget(self.layer_pick_btn)
+
         return left_panel
+
+    def handle_click(self, obj, event):
+        if self.picking_handler.active:
+            self.picking_handler.on_click(obj, event)
+        elif self.layer_picking_handler.active:
+            self.layer_picking_handler.on_click(obj, event)
+
+    def toggle_layer_picking(self):
+        if self.layer_picking_handler.active:
+            self.layer_picking_handler.deactivate()
+            self.iren.GetInteractorStyle().DisablePicking()
+            self.layer_pick_btn.setText("Pick Layer")
+        else:
+            self.picking_handler.deactivate()  # Ensure other picker is off
+            self.layer_picking_handler.activate()
+            self.iren.GetInteractorStyle().EnablePicking()
+            self.layer_pick_btn.setText("Stop Layer Picking")
+
 
     def toggle_label_matching(self):
         if self.picking_handler.active:
             self.picking_handler.deactivate()
+            self.iren.GetInteractorStyle().DisablePicking()
+            self.match_btn.setText("Match Labels")
         else:
             self.picking_handler.activate()
+            self.iren.GetInteractorStyle().EnablePicking()
+            self.match_btn.setText("Stop Matching")
 
     def toggle_volume_visibility(self, item):
         idx = self.segmentation_visibility_list.row(item)
@@ -423,7 +626,7 @@ class MainWindow(QMainWindow):
 
     def load_multiple_masks(self):
         files, _ = QFileDialog.getOpenFileNames(
-            self,
+                    self,
             "Select Mask Files",
             filter="NRRD mask files (*mask.nrrd)"
         )
@@ -466,11 +669,13 @@ class MainWindow(QMainWindow):
             print("Cancelled matching")
             self.picking_handler.deactivate()
             self.update_visualization()
+        elif key == 'p':
+            self.toggle_layer_picking()
+
 
     def close_application(self):
         self.close()
         QApplication.quit()
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
