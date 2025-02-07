@@ -7,9 +7,9 @@ from PyQt5.QtGui import QKeySequence
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 import vtk
 from PyQt5.QtCore import Qt
-from nrrd_file import Nrrd
+from synthetic_pages.nrrd_file import Nrrd
 from vtkmodules.util.numpy_support import numpy_to_vtk
-from match_stitches import match_stitches
+from synthetic_pages.match_stitches import match_stitches
 
 @dataclass
 class Segmentation:

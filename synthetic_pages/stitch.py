@@ -1,5 +1,5 @@
 import logging
-from unet import UNet
+from synthetic_pages.unet import UNet
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO)

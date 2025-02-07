@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Tuple
-from nrrd_file import Nrrd
+from synthetic_pages.nrrd_file import Nrrd
 
 Array3DIndex = Tuple[int | slice, int | slice, int | slice]
 

@@ -1,7 +1,7 @@
 hari_cubes = "hari-cubes/"
 
 from pathlib import Path
-from main import *
+from synthetic_pages.main import *
 import numpy as np
 
 cube_names = [p for p in Path(hari_cubes).iterdir() if not p.name.startswith(".")]

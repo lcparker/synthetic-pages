@@ -70,7 +70,7 @@ def bezier_3d(control_points: np.ndarray, p: np.ndarray) -> np.ndarray:
     return pts # (N, 3)
 
 import vtk
-from mesh import Mesh
+from synthetic_pages.mesh import Mesh
 
 def triangulate_pointcloud(pointcloud: np.ndarray) -> Mesh:
     """
@@ -506,7 +506,7 @@ def save_labelmap(labelmap: np.ndarray, filename: str) -> None:
     }
     nrrd.write(filename, labelmap, header)
 
-from nrrd_file import *
+from synthetic_pages.nrrd_file import *
 
 if __name__ == "__main__":
     # generate control points in unit grid
