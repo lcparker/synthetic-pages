@@ -1,0 +1,9 @@
+numpy
+pynrrd
+matplotlib
+scipy
+vtk
+torch
+pillow
+tqdm
+monai
