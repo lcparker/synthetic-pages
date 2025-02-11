@@ -1,6 +1,6 @@
 import nrrd
 from pathlib import Path
-from typing import Self, Literal
+from typing import Literal
 
 import numpy as np
 
@@ -13,7 +13,7 @@ class Nrrd:
         self.volume = volume
         self.metadata = metadata
 
-    def __eq__(self: Self, other: Self) -> bool:
+    def __eq__(self, other) -> bool:
         volumes_eq = bool(np.all(self.volume == other.volume))
         def entry_eq(k1, k2):
             if isinstance(k1, np.ndarray) or isinstance(k2, np.ndarray):
