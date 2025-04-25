@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Literal
 
 import numpy as np
+import torch  # Ensure PyTorch is imported for tensor handling
 
 class Nrrd:
     def __init__(self, volume: np.ndarray, metadata) -> None:
@@ -77,10 +78,28 @@ class Nrrd:
                 }
         return Nrrd(volume, metadata)
 
+    @staticmethod
+    def from_volume(volume: np.ndarray | torch.Tensor, metadata: dict = None):
+        if isinstance(volume, torch.Tensor):
+            volume = volume.numpy()  # Convert PyTorch tensor to NumPy array
+
+        if len(volume.shape) != 3:
+            raise ValueError("Volume must have shape (H, W, D)")
+
+        # Use provided metadata or set reasonable defaults
+        if metadata is None:
+            metadata = {
+                'type': str(volume.dtype),
+                'dimension': 3,
+                'space': 'left-posterior-superior',
+                'sizes': volume.shape,
+                'space directions': np.eye(3),
+                'endian': 'little',
+                'encoding': 'gzip',
+                'space origin': np.zeros(3)
+            }
+
+        return Nrrd(volume, metadata)
+
     def write(self, filename: str | Path, index_order: Literal["F", "C"] = "F") -> None:
         nrrd.write(file = str(filename), data = self.volume, header = self.metadata, index_order=index_order)
-
-    def to_onehot(self):
-        # TODO
-        pass
-
