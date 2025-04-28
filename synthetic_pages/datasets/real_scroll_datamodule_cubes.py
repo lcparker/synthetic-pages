@@ -8,7 +8,7 @@ import torch
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 
-from scrolls_instance_segmentation.data.cube_dataset_base import CubeLoader
+from .cube_loader import CubeLoader
 
 
 class InstanceCubesDataset(IterableDataset):

@@ -8,7 +8,7 @@ import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from scipy.ndimage import gaussian_filter
 
-from scrolls_instance_segmentation.data.cube_dataset_base import CubeLoader
+from .cube_loader import CubeLoader
 
 from synthetic_pages.main import (
     BoundingBox2D, 
