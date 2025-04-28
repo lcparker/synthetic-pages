@@ -103,8 +103,3 @@ class Nrrd:
 
     def write(self, filename: str | Path, index_order: Literal["F", "C"] = "F") -> None:
         nrrd.write(file = str(filename), data = self.volume, header = self.metadata, index_order=index_order)
-
-    def to_onehot(self):
-        # TODO
-        pass
-

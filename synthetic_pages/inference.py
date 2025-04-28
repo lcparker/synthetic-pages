@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import torch
-from synthetic_pages.nrrd_file import Nrrd
+from synthetic_pages.nrrd import Nrrd
 import argparse
 from pathlib import Path
 
