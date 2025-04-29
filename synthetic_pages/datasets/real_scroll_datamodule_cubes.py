@@ -31,7 +31,6 @@ class InstanceCubesDataset(IterableDataset):
     Cube size is hardcoded to match available training data of 256
     """
 
-
     def __init__(self,
                  dataset_path: Path,
                  spatial_transform: bool = True,
