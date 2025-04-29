@@ -1,5 +1,5 @@
 # Description of the repository
-This repository is home to the code I'm working on as part of the [Vesuvius Challenge](scrollprize.org).
+This repository is home to the code I'm working on as part of the [Vesuvius Challenge](https://scrollprize.org).
 
 Here, you will find:
 * Algorithms to generate synthetic instance-labelled data scroll volume data. We've found this useful for training instance segmentation neural networks 
@@ -7,7 +7,7 @@ Here, you will find:
 * PyTorch datasets that can be plugged into existing network approaches. Two PyTorch datasets are provided in `synthetic_pages.datasets`:
     - `InstanceCubesDataset`, which can be used to feed 3D scroll volumes extracted from the scroll CT
     - `SyntheticInstanceCubesDataset`, which generates *synthetic* pseudo-volumes. We have found these useful for pretraining our networks.
-    - These are based on the ones from [Tim Skinner's progress prize submission](github.com/tspersonalgithub/december_2024_progress_submission)
+    - These are based on the ones from [Tim Skinner's progress prize submission](https://github.com/tspersonalgithub/december_2024_progress_submission)
 * Scripts that can be used to download raw data (TIFs) of the scrolls, convert them to cubes, and infer them (this is useful for doing data processing on the cloud) (in `scripts/`)
 * `label.py`, a volume annotation tool that I'm hoping to use for post-processing instance-segmentation predictions, stitching them into larger segments for flattening
 * Code to match inferred labels on adjacent volumes, for generating larger sheets (in `match_stitches`)
