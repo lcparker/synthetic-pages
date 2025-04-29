@@ -5,27 +5,18 @@ The pages should be non-overlapping.
 """
 
 from math import comb
+
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
-from matplotlib.axes import Axes
-from typing import TypeVar
+import vtk
 
-from tests.test_homogeneous_transform import run_transform_tests
-from synthetic_pages.homogeneous_transform import HomogeneousTransform
+from synthetic_pages.types.homogeneous_transform import HomogeneousTransform
 from synthetic_pages.types.bounding_box_2d import BoundingBox2D
 from synthetic_pages.types.bounding_box_3d import BoundingBox3D
+from synthetic_pages.types.mesh import Mesh
 
 def bernstein(index: int, degree: int, t: np.ndarray) -> np.ndarray:
     return comb(degree, index) * np.power(t, index) * np.power(1 - t, degree - index)
-
-def __test_bernstein_visual():
-    xs = np.linspace(0,1,100)
-    for i in range(5):
-        ys = [bernstein(i, 4 ,x) for x in xs]
-        plt.plot(xs, ys)
-
-    plt.show()
 
 def bezier_3d(control_points: np.ndarray, p: np.ndarray) -> np.ndarray:
     """
@@ -48,8 +39,14 @@ def bezier_3d(control_points: np.ndarray, p: np.ndarray) -> np.ndarray:
     pts = np.einsum('ija, Nij -> Na',control_points, B_uvw)
     return pts # (N, 3)
 
-import vtk
-from synthetic_pages.types.mesh import Mesh
+def __test_bernstein_visual():
+    xs = np.linspace(0,1,100)
+    for i in range(5):
+        ys = [bernstein(i, 4 ,x) for x in xs]
+        plt.plot(xs, ys)
+
+    plt.show()
+
 
 def triangulate_pointcloud(pointcloud: np.ndarray) -> Mesh:
     """

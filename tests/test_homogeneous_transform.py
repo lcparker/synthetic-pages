@@ -1,4 +1,4 @@
-from synthetic_pages.homogeneous_transform import HomogeneousTransform
+from synthetic_pages.types.homogeneous_transform import HomogeneousTransform
 
 
 import numpy as np

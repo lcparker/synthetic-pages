@@ -8,7 +8,7 @@ import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from scipy.ndimage import gaussian_filter
 
-from synthetic_pages.homogeneous_transform import HomogeneousTransform
+from synthetic_pages.types.homogeneous_transform import HomogeneousTransform
 from synthetic_pages.types.bounding_box_2d import BoundingBox2D
 from synthetic_pages.types.bounding_box_3d import BoundingBox3D
 

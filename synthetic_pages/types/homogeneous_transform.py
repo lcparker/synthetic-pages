@@ -1,3 +1,4 @@
+from typing import TypeVar
 from synthetic_pages.types.bounding_box_3d import BoundingBox3D
 from synthetic_pages.types.mesh import Mesh
 
