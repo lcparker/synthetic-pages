@@ -1,4 +1,3 @@
-import vtk
 import unittest
 import numpy as np
 from pathlib import Path
@@ -69,25 +68,6 @@ class Mesh:
         ax.set_title('3D Mesh with Filled Surface')
 
         plt.show()
-
-    def to_polydata(self) -> vtk.vtkPolyData:
-        # This could become a bottleneck if we do this for very large meshes
-        points = vtk.vtkPoints()
-        for point in self.points:
-            points.InsertNextPoint(point)
-        
-        triangles = vtk.vtkCellArray()
-        for triangle in self.triangles:
-            tri = vtk.vtkTriangle()
-            for i in range(3):
-                tri.GetPointIds().SetId(i, triangle[i])
-            triangles.InsertNextCell(tri)
-        
-        polydata = vtk.vtkPolyData()
-        polydata.SetPoints(points)
-        polydata.SetPolys(triangles)
-
-        return polydata
 
     @staticmethod
     def _stream_obj_elements(file_path: Path | str, chunk_size: int = 8192):

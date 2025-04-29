@@ -5,7 +5,6 @@ import numpy as np
 from torch.utils.data import IterableDataset
 import nrrd
 import torch
-import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 
 from .cube_loader import CubeLoader
@@ -89,26 +88,3 @@ class InstanceCubesDataset(IterableDataset):
         batch = {'vol': torch.from_numpy(vol),
                  'lbl': lbl}
         return batch
-
-def worker_init_fn(test: int):
-    random.seed((torch.utils.data.get_worker_info().seed) % (2**32 - 1))
-    np.random.seed(seed=((torch.utils.data.get_worker_info().seed) % (2**32 - 1)))
-
-
-class CubesDataModule(pl.LightningDataModule):
-    def __init__(self, dataset_path: Path, batch_size: int = 1, num_workers: int = 0):
-        super().__init__()
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-        self.training_set = InstanceCubesDataset(dataset_path)
-        self.validation_set = InstanceCubesDataset(dataset_path)
-        self.test_set = None
-
-    def train_dataloader(self) -> DataLoader:
-        return DataLoader(self.training_set, batch_size=self.batch_size, num_workers=self.num_workers, worker_init_fn=worker_init_fn)
-
-    def val_dataloader(self):
-        return DataLoader(self.validation_set, batch_size=self.batch_size, num_workers=2, worker_init_fn=worker_init_fn)
-
-    def test_dataloader(self):
-        return DataLoader(self.test_set, batch_size=self.batch_size, num_workers=self.num_workers, worker_init_fn=worker_init_fn)

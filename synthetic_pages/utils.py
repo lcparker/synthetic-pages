@@ -275,31 +275,3 @@ def save_labelmap(labelmap: np.ndarray, filename: str) -> None:
                              [0.0, 0.0, 1.0]]
     }
     nrrd.write(filename, labelmap, header)
-
-def plot_meshes(meshes: list[Mesh],bbox: BoundingBox3D):
-    # Create a renderer and render window
-    renderer = vtk.vtkRenderer()
-    render_window = vtk.vtkRenderWindow()
-    render_window.AddRenderer(renderer)
-    render_window_interactor = vtk.vtkRenderWindowInteractor()
-    render_window_interactor.SetRenderWindow(render_window)
-    
-    for mesh in meshes:
-        polydata = mesh.to_polydata()
-        
-        # Create a mapper
-        mapper = vtk.vtkPolyDataMapper()
-        mapper.SetInputData(polydata)
-        
-        # Create an actor
-        actor = vtk.vtkActor()
-        actor.SetMapper(mapper)
-        
-        # Add the actor to the renderer
-        renderer.AddActor(actor)
-    
-    # Set background color and render the scene
-    renderer = plot_bounding_box_vtk(renderer, bbox)
-    renderer.SetBackground(0.1, 0.2, 0.3)
-    render_window.Render()
-    render_window_interactor.Start()

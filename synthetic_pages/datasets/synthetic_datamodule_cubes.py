@@ -4,7 +4,6 @@ import numpy as np
 from torch.utils.data import IterableDataset
 import nrrd
 import torch
-import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from scipy.ndimage import gaussian_filter
 
@@ -160,33 +159,3 @@ class SyntheticInstanceCubesDataset(IterableDataset):
         output_vol = ((65535 - vol_min) * (output_vol - vol_min) / np.ptp(output_vol)) + vol_min
 
         return output_vol, labels
-
-
-def worker_init_fn(test: int):
-    random.seed((torch.utils.data.get_worker_info().seed) % (2**32 - 1))
-    np.random.seed(seed=((torch.utils.data.get_worker_info().seed) % (2**32 - 1)))
-
-
-class CubesDataModule(pl.LightningDataModule):
-    def __init__(self,
-                 reference_volume_filename: str,
-                 reference_label_filename: str,
-                 batch_size: int = 1,
-                 num_workers: int = 0):
-        super().__init__()
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-        self.training_set = SyntheticInstanceCubesDataset(reference_volume_filename=reference_volume_filename,
-                                                          reference_label_filename=reference_label_filename)
-        self.validation_set = SyntheticInstanceCubesDataset(reference_volume_filename=reference_volume_filename,
-                                                            reference_label_filename=reference_label_filename)
-        self.test_set = None
-
-    def train_dataloader(self) -> DataLoader:
-        return DataLoader(self.training_set, batch_size=self.batch_size, num_workers=self.num_workers, worker_init_fn=worker_init_fn, prefetch_factor=None)
-
-    def val_dataloader(self):
-        return DataLoader(self.validation_set, batch_size=self.batch_size, num_workers=self.num_workers, worker_init_fn=worker_init_fn)
-
-    def test_dataloader(self):
-        return DataLoader(self.test_set, batch_size=self.batch_size, num_workers=self.num_workers, worker_init_fn=worker_init_fn)
