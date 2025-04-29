@@ -1,7 +1,7 @@
 from matplotlib import pyplot as plt
 import numpy as np
 from synthetic_pages.main import BoundingBox3D, HomogeneousTransform, bernstein, page_meshes_to_volume, save_labelmap, triangulate_pointcloud, unit_plane_3d
-from synthetic_pages.mesh import Mesh
+from synthetic_pages.types.mesh import Mesh
 
 
 def bezier_space_deformation(control_points: np.ndarray, points: np.ndarray) -> np.ndarray:

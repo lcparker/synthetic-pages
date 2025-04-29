@@ -70,7 +70,7 @@ def bezier_3d(control_points: np.ndarray, p: np.ndarray) -> np.ndarray:
     return pts # (N, 3)
 
 import vtk
-from synthetic_pages.mesh import Mesh
+from synthetic_pages.types.mesh import Mesh
 
 def triangulate_pointcloud(pointcloud: np.ndarray) -> Mesh:
     """
@@ -378,8 +378,6 @@ def page_meshes_to_volume(page_meshes: list[Mesh], grid_size: int, page_thicknes
     page_labels = np.argmin(sdfs, axis=-1) + 1 # page labels are positive indices
     page_labels[sdfs.min(axis=-1) > page_thickness / 2] = 0 # no page is the zero index
     return page_labels
-
-
 
 def plot_bounding_box_vtk(renderer, bbox: BoundingBox3D):
     """Plot a 3D bounding box in a VTK renderer."""

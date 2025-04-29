@@ -5,7 +5,7 @@ from pathlib import Path
 import argparse
 
 from synthetic_pages.main import HomogeneousTransform
-from synthetic_pages.mesh import Mesh
+from synthetic_pages.types.mesh import Mesh
 
 def create_xyz_to_zyx_transform() -> HomogeneousTransform:
     """Creates transform matrix to convert from XYZ to ZYX"""
