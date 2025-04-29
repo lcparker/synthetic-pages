@@ -4,7 +4,7 @@ This repository is home to the code I'm working on as part of the [Vesuvius Chal
 Here, you will find:
 * Algorithms to generate synthetic instance-labelled data scroll volume data. We've found this useful for training instance segmentation neural networks 
     - `bezier_volume_generation.py`
-* PyTorch datasets that can be plugged into existing network approaches. Two dataloaders are provided:
+* PyTorch datasets that can be plugged into existing network approaches. Two PyTorch datasets are provided in `synthetic_pages.datasets`:
     - `InstanceCubesDataset`, which can be used to feed 3D scroll volumes extracted from the scroll CT
     - `SyntheticInstanceCubesDataset`, which generates *synthetic* pseudo-volumes. We have found these useful for pretraining our networks.
     - These are based on the ones from [Tim Skinner's progress prize submission](github.com/tspersonalgithub/december_2024_progress_submission)
