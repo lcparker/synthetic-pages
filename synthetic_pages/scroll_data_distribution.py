@@ -1,7 +1,7 @@
 hari_cubes = "hari-cubes/"
 
 from pathlib import Path
-from synthetic_pages.main import *
+from synthetic_pages.utils import *
 import numpy as np
 
 cube_names = [p for p in Path(hari_cubes).iterdir() if not p.name.startswith(".")]
@@ -58,17 +58,6 @@ def make_distribution_files():
             print("saving")
             save_distribution(kde, Path(d) / f"intensity_distribution_{page_no}.pkl")
         del vol, mask
-
-
-"""
-Secondary idea for intensity mapping: 
-* take random windows of intensities and overlay them so they're overlapping, interpolating in the areas where they overlap.
-* gaussian blur/conv blur
-
-
-but try to get something training.
-"""
-
 
 def grep_volume_from_directory(directory: str | Path) -> Nrrd:
     files = [

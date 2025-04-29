@@ -1,9 +1,9 @@
 import numpy as np
 from typing import Tuple, Union
-from synthetic_pages.main import Nrrd
+from synthetic_pages.utils import Nrrd
 import numpy as np
 from typing import Tuple, Union, List
-from synthetic_pages.main import Nrrd
+from synthetic_pages.utils import Nrrd
 import copy
 
 from synthetic_pages.types.types import Indices3D, Point3D
@@ -82,7 +82,7 @@ def densely_subsample(
 
 import unittest
 import numpy as np
-from synthetic_pages.main import Nrrd
+from synthetic_pages.utils import Nrrd
 import tempfile
 from pathlib import Path
 from typing import List

@@ -2,7 +2,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 from synthetic_pages.homogeneous_transform import HomogeneousTransform
 from synthetic_pages.types.bounding_box_3d import BoundingBox3D
-from synthetic_pages.main import bernstein, page_meshes_to_volume, save_labelmap, triangulate_pointcloud, unit_plane_3d
+from synthetic_pages.utils import bernstein, page_meshes_to_volume, save_labelmap, triangulate_pointcloud, unit_plane_3d
 from synthetic_pages.types.mesh import Mesh
 
 

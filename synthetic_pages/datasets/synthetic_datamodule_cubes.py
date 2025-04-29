@@ -14,7 +14,7 @@ from synthetic_pages.types.bounding_box_3d import BoundingBox3D
 
 from .cube_loader import CubeLoader
 
-from synthetic_pages.main import (
+from synthetic_pages.utils import (
     make_control_points_3d, 
     unit_plane_3d, 
     Mesh, 
