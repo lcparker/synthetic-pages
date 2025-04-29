@@ -74,23 +74,6 @@ def make_network(weights_path: str | Path | None = None) -> UNet:
     if weights_path:
         network.load_state_dict(torch.load(weights_path, weights_only=True, map_location=device))
     else:
-        from scrolls.weights_init import InitWeights_He
+        raise ValueError(f"No weights path provided.")
 
-        network.apply(InitWeights_He())
     return network.to(device)
-
-
-if __name__ == "__main__":
-
-    logging.getLogger(__name__).log(logging.INFO, "Running as script")
-    logging.getLogger(__name__).log(logging.INFO, "Making network")
-
-    network = make_network()
-
-    logging.getLogger(__name__).log(logging.INFO, f"Network weights: {network}")
-
-    # import torch
-    # random_input = torch.rand((1,512,512,512))
-    # out = network(random_input)
-    # logging.getLogger(__name__).log(logging.INFO, f"Network infer values: {out}")
-    # logging.getLogger(__name__).log(logging.INFO, f"Network infer shape: {out.shape}")
