@@ -258,6 +258,23 @@ def plot_bounding_box_vtk(renderer, bbox: BoundingBox3D):
         renderer.AddActor(actor)
     return renderer
 
+def save_labelmap(labelmap: np.ndarray, filename: str) -> None:
+    import nrrd
+    if len(labelmap.shape) != 3: raise ValueError("Labelmap must have shape (H, W, D)")
+    header = {
+        'type': 'int',
+        'dimension': 3,
+        'sizes': labelmap.shape,
+        'space': 'left-posterior-superior',
+        'kinds': ['domain', 'domain', 'domain'],
+        'endian': 'little',
+        'encoding': 'raw',
+        'space origin': [0.0, 0.0, 0.0],
+        'space directions': [[1.0, 0.0, 0.0],
+                             [0.0, 1.0, 0.0],
+                             [0.0, 0.0, 1.0]]
+    }
+    nrrd.write(filename, labelmap, header)
 
 def plot_meshes(meshes: list[Mesh],bbox: BoundingBox3D):
     # Create a renderer and render window
