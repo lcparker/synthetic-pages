@@ -9,33 +9,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
-from scipy.spatial.transform import Rotation
 from typing import TypeVar
 
-Point2D = tuple[float, float]
-Point3D = tuple[float, float, float]
-Indices3D = tuple[int, int, int]
-
-class BoundingBox2D:
-    def __init__(self, min: Point2D, max: Point2D):
-        self.min = min
-        self.max = max
-
-class BoundingBox3D:
-    def __init__(self, min: tuple[float, float, float], max: tuple[float, float, float]):
-        self.min = min
-        self.max = max
-
-    def to_grid(self, nx: int, ny: int, nz: int) -> np.ndarray:
-        """
-        Returns (nx, ny, nz, 3) grid evenly spaced inside bounding box
-        """
-        xs = np.linspace(self.min[0], self.max[0], nx)
-        ys = np.linspace(self.min[1], self.max[1], ny)
-        zs = np.linspace(self.min[2], self.max[2], nz)
-        X, Y, Z = np.meshgrid(xs, ys, zs, indexing='ij')
-        control_points_3d = np.stack((X, Y, Z), axis=-1)
-        return control_points_3d
+from tests.test_homogeneous_transform import run_transform_tests
+from synthetic_pages.homogeneous_transform import HomogeneousTransform
+from synthetic_pages.types.bounding_box_2d import BoundingBox2D
+from synthetic_pages.types.bounding_box_3d import BoundingBox3D
 
 def bernstein(index: int, degree: int, t: np.ndarray) -> np.ndarray:
     return comb(degree, index) * np.power(t, index) * np.power(1 - t, degree - index)
@@ -160,148 +139,6 @@ def save_mask_as_nifti(mask, filename):
     # Save the image to file
     nib.save(nifti_img, filename)
 
-def mask_to_mesh(mask) -> Mesh:
-    from skimage.measure import marching_cubes
-    verts, faces, _, _ = marching_cubes(mask, level=0)
-    return Mesh(verts, faces)
-
-
-Transformable = TypeVar('Transformable', Mesh, np.ndarray)
-class HomogeneousTransform:
-    def __init__(self, matrix=None):
-        if matrix is None:
-            self.matrix = np.eye(4)
-        else:
-            assert matrix.shape == (4, 4), "Matrix must be of shape (4, 4)"
-            self.matrix = matrix
-
-    def apply(self, x: Transformable) -> Transformable:
-        if isinstance(x, Mesh):
-            return self._apply_mesh(x)
-        elif isinstance(x, np.ndarray):
-            return self._apply_ndarray(x)
-        else:
-            raise ValueError(f"Unsupported type for matrix multiplication: {type(x)}")
-
-    @staticmethod
-    def translation(x: float, y: float, z: float):
-        # Create translation matrix
-        translation_matrix = np.eye(4)
-        translation_matrix[:3, 3] = np.array([x,y,z])
-        return HomogeneousTransform(translation_matrix)
-
-    @staticmethod
-    def random_transform(bbox: BoundingBox3D):
-        # Generate random rotation
-        rotation = Rotation.random().as_matrix()
-        
-        # Generate random scaling
-        scale_factors = np.random.uniform(0.5, 1.5, size=3)
-        scale_matrix = np.diag(np.append(scale_factors, 1))
-        
-        # Generate random translation that keeps the object within the bounding box
-        # translation = np.random.uniform(bbox.min, bbox.max)
-        
-        # Create translation matrix
-        translation_matrix = np.eye(4)
-        # translation_matrix[:3, 3] = translation
-        translation_matrix[:3, 3] = 0.5 * (np.array(bbox.min) + np.array(bbox.max))
-        
-        # Combine rotation, scaling, and translation into a single transformation matrix
-        transform_matrix = translation_matrix @ scale_matrix
-        transform_matrix[:3, :3] = transform_matrix[:3, :3] @ rotation
-        
-        return HomogeneousTransform(transform_matrix)
-
-    def _apply_ndarray(self, points: np.ndarray) -> np.ndarray:
-        # Ensure points are of shape (..., 3)
-        assert points.shape[-1] == 3, "Points must have shape (..., 3)"
-        
-        # Convert points to homogeneous coordinates by adding a 1 in the last dimension
-        homogeneous_coordinates = np.concatenate([points, np.ones(points.shape[:-1])[..., None]], axis=-1)
-        transformed_points_homogeneous = homogeneous_coordinates @ self.matrix.T
-
-        # Convert back to 3D coordinates
-        transformed_points = transformed_points_homogeneous[..., :3] / transformed_points_homogeneous[..., 3, np.newaxis]
-        
-        return transformed_points
-
-    def _apply_mesh(self, mesh: Mesh) -> Mesh:
-        return Mesh(self.apply(mesh.points), mesh.triangles)
-
-###### tests for homogeneous transforms ######
-
-import unittest
-from numpy.testing import assert_array_almost_equal
-
-
-class TestHomogeneousTransform(unittest.TestCase):
-    
-    def test_identity_transformation(self):
-        transform = HomogeneousTransform()
-        points = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
-        transformed_points = transform.apply(points)
-        assert_array_almost_equal(transformed_points, points)
-
-    def test_translation(self):
-        translation_matrix = np.eye(4)
-        translation_matrix[:3, 3] = [1, 2, 3]
-        transform = HomogeneousTransform(translation_matrix)
-        points = np.array([[0, 0, 0], [1, 1, 1], [2, 2, 2]])
-        transformed_points = transform.apply(points)
-        expected_points = np.array([[1, 2, 3], [2, 3, 4], [3, 4, 5]])
-        assert_array_almost_equal(transformed_points, expected_points)
-
-    def test_scaling(self):
-        scaling_matrix = np.diag([2, 3, 4, 1])
-        transform = HomogeneousTransform(scaling_matrix)
-        points = np.array([[1, 1, 1], [2, 2, 2], [3, 3, 3]])
-        transformed_points = transform.apply(points)
-        expected_points = np.array([[2, 3, 4], [4, 6, 8], [6, 9, 12]])
-        assert_array_almost_equal(transformed_points, expected_points)
-
-    def test_rotation(self):
-        angle = np.pi / 2
-        rotation_matrix = np.array([
-            [np.cos(angle), -np.sin(angle), 0, 0],
-            [np.sin(angle), np.cos(angle), 0, 0],
-            [0, 0, 1, 0],
-            [0, 0, 0, 1]
-        ])
-        transform = HomogeneousTransform(rotation_matrix)
-        points = np.array([[1, 0, 0], [0, 1, 0], [-1, 0, 0], [0, -1, 0]])
-        transformed_points = transform.apply(points)
-        expected_points = np.array([[0, 1, 0], [-1, 0, 0], [0, -1, 0], [1, 0, 0]])
-        assert_array_almost_equal(transformed_points, expected_points)
-
-    def test_combined_transformation(self):
-        # Combined translation and scaling
-        matrix = np.eye(4)
-        matrix[:3, :3] = np.diag([2, 2, 2])
-        matrix[:3, 3] = [1, 1, 1]
-        transform = HomogeneousTransform(matrix)
-        points = np.array([[1, 1, 1], [2, 2, 2], [3, 3, 3]])
-        transformed_points = transform.apply(points)
-        expected_points = np.array([[3, 3, 3], [5, 5, 5], [7, 7, 7]])
-        assert_array_almost_equal(transformed_points, expected_points)
-
-def run_transform_tests():
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestHomogeneousTransform)
-    unittest.TextTestRunner().run(suite)
-
-if __name__ == '__main__':
-    run_transform_tests()
-
-###############################
-
-def _test_transform_page(control_points, bbox_3d: BoundingBox3D):
-    mesh = bezier_surface(control_points, num_points_per_axis=10)
-    tf = HomogeneousTransform.random_transform(bbox_3d)
-    mesh = tf.apply(mesh)
-
-    _, ax = mesh.scene_with_mesh_in_it()
-    plt.show()
-
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 def plot_bounding_box(ax, bbox: BoundingBox3D):
     """Plot a 3D bounding box."""
@@ -353,8 +190,6 @@ def _test_bounding_box_vis(control_points, bbox_3d: BoundingBox3D):
     _, ax = mesh.scene_with_mesh_in_it()
     ax = plot_bounding_box(ax, bbox_3d)
     plt.show()
-
-### MULTI PAGE
 
 def tesselate_pages(control_points, bbox_3d: BoundingBox3D, num_pages: int, spacing: float) -> list[Mesh]:
     """

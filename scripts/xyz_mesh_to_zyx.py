@@ -4,7 +4,7 @@ import numpy as np
 from pathlib import Path
 import argparse
 
-from synthetic_pages.main import HomogeneousTransform
+from synthetic_pages.homogeneous_transform import HomogeneousTransform
 from synthetic_pages.types.mesh import Mesh
 
 def create_xyz_to_zyx_transform() -> HomogeneousTransform:

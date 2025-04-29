@@ -9,8 +9,6 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 
-from typing import Self
-
 class Mesh:
     def __init__(self, points, triangles):
         assert points.shape[-1] == 3
@@ -352,6 +350,11 @@ class TestMeshOBJ(unittest.TestCase):
         self.assertEqual(len(mesh.triangles), 1)
         np.testing.assert_array_equal(mesh.triangles[0], [0, 1, 2])
 
-
-if __name__ == '__main__':
-    unittest.main()
+    @classmethod
+    def from_mask(
+        cls, 
+        mask: np.ndarray # (H, W, D)
+        ):
+        from skimage.measure import marching_cubes
+        verts, faces, _, _ = marching_cubes(mask, level=0)
+        return Mesh(verts, faces)

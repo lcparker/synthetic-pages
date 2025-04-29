@@ -1,6 +1,8 @@
 from matplotlib import pyplot as plt
 import numpy as np
-from synthetic_pages.main import BoundingBox3D, HomogeneousTransform, bernstein, page_meshes_to_volume, save_labelmap, triangulate_pointcloud, unit_plane_3d
+from synthetic_pages.homogeneous_transform import HomogeneousTransform
+from synthetic_pages.types.bounding_box_3d import BoundingBox3D
+from synthetic_pages.main import bernstein, page_meshes_to_volume, save_labelmap, triangulate_pointcloud, unit_plane_3d
 from synthetic_pages.types.mesh import Mesh
 
 
@@ -114,8 +116,8 @@ if __name__ == "__main__":
     planes = [HomogeneousTransform.translation(0,0,z).apply(pc) for z in np.linspace(0,1,10)]
     deformed_planes = [bezier_space_deformation(control_points, plane) for plane in planes]
     print(f'no overlaps?: {control_points_well_ordered(control_points)}')
-    # fig, ax = plot_point_cloud(control_points.reshape(-1, 3))
-    # plt.show()
+    fig, ax = plot_point_cloud(control_points.reshape(-1, 3))
+    plt.show()
     meshes = [Mesh(dp, triangulate_pointcloud(pc).triangles) for dp in deformed_planes]
     fig, ax = meshes[0].scene_with_mesh_in_it()
     for mesh in meshes[1:]:

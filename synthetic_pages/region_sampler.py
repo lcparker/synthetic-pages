@@ -1,10 +1,12 @@
 import numpy as np
 from typing import Tuple, Union
-from synthetic_pages.main import Nrrd, Point3D, Indices3D
+from synthetic_pages.main import Nrrd
 import numpy as np
 from typing import Tuple, Union, List
-from synthetic_pages.main import Nrrd, Point3D
+from synthetic_pages.main import Nrrd
 import copy
+
+from synthetic_pages.types.types import Indices3D, Point3D
 
 
 def densely_subsample(

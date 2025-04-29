@@ -8,14 +8,15 @@ import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from scipy.ndimage import gaussian_filter
 
+from synthetic_pages.homogeneous_transform import HomogeneousTransform
+from synthetic_pages.types.bounding_box_2d import BoundingBox2D
+from synthetic_pages.types.bounding_box_3d import BoundingBox3D
+
 from .cube_loader import CubeLoader
 
 from synthetic_pages.main import (
-    BoundingBox2D, 
-    BoundingBox3D, 
     make_control_points_3d, 
     unit_plane_3d, 
-    HomogeneousTransform, 
     Mesh, 
     triangulate_pointcloud, 
     page_meshes_to_volume,
