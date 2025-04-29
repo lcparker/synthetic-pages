@@ -25,7 +25,7 @@ def setup_device(force_cpu: bool) -> torch.device:
 
 def load_model(weights_path: str, device: torch.device):
     try:
-        from synthetic_pages.stitch import make_network
+        from synthetic_pages.unet import make_network
         network = make_network(weights_path)
         network.to(device)
         network.eval()
