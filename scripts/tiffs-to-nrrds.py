@@ -2,13 +2,14 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
-from synthetic_pages.types.nrrd import Nrrd
 from typing import Optional, Tuple, Iterator, List, Sequence, Dict
 from dataclasses import dataclass
 import gc
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import sys
+
+from synthetic_pages.types.nrrd import Nrrd
 
 # Configure logging
 logging.basicConfig(
