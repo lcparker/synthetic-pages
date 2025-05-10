@@ -7,6 +7,7 @@ import torch
 from torch.utils.data import DataLoader
 from scipy.ndimage import gaussian_filter
 
+from synthetic_pages.datasets.instance_volume_batch import InstanceVolumeBatch
 from synthetic_pages.types.homogeneous_transform import HomogeneousTransform
 from synthetic_pages.types.bounding_box_2d import BoundingBox2D
 from synthetic_pages.types.bounding_box_3d import BoundingBox3D
@@ -88,9 +89,7 @@ class SyntheticInstanceCubesDataset(IterableDataset):
         if self.layer_shuffle:
             lbl = self.cube_loader.shuffle_layers(lbl)
 
-        batch = {'vol': torch.from_numpy(vol),
-                 'lbl': lbl}
-        return batch
+        return InstanceVolumeBatch(vol=torch.from_numpy(vol), lbl=lbl)
 
     def _generate_label_and_vol(self) -> Tuple[np.ndarray, np.ndarray]: # ((H, W, D), (H, W, D))
         """First pass. Required a LOT of turning and fiddling"""

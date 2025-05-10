@@ -1,11 +1,14 @@
 import random
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 from torch.utils.data import IterableDataset
 import nrrd
 import torch
 from torch.utils.data import DataLoader
+
+from synthetic_pages.datasets.instance_volume_batch import InstanceVolumeBatch
 
 from .cube_loader import CubeLoader
 
@@ -85,6 +88,4 @@ class InstanceCubesDataset(IterableDataset):
         if self.layer_shuffle:
             lbl = self.cube_loader.shuffle_layers(lbl)
 
-        batch = {'vol': torch.from_numpy(vol),
-                 'lbl': lbl}
-        return batch
+        return InstanceVolumeBatch(vol=torch.from_numpy(vol), lbl=lbl)
