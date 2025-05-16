@@ -1,11 +1,12 @@
 import random
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, Tuple
 
 import numpy as np
 from torch.utils.data import IterableDataset
 import nrrd
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from synthetic_pages.datasets.instance_volume_batch import InstanceVolumeBatch
@@ -38,12 +39,16 @@ class InstanceCubesDataset(IterableDataset):
                  spatial_transform: bool = True,
                  layer_dropout: bool = False,
                  layer_shuffle: bool = True,
+                 output_volume_size: Tuple[int, int, int] = (256, 256, 256),
                  ):
         self.cube_size = 256
         self.max_cube_size = 256
         self.spatial_transform = spatial_transform
         self.layer_dropout = layer_dropout
         self.layer_shuffle = layer_shuffle
+
+        assert len(output_volume_size) == 3, f"output_volume_size must be tuple of (height, width, depth) but was {output_volume_size}"
+        self.output_volume_size = output_volume_size
 
         self.volume_list = list(dataset_path.glob('*_volume.nrrd'))
         self.cube_loader = CubeLoader()
@@ -58,7 +63,7 @@ class InstanceCubesDataset(IterableDataset):
         for cube in self.volume_list:
             yield self._gather_batch(cube)
 
-    def _get_label_and_volume(self, cube_path: Path):
+    def _get_label_and_volume(self, cube_path: Path) -> InstanceVolumeBatch:
 
         x_offset = np.random.randint(0, self.max_cube_size - self.cube_size + 1)
         y_offset = np.random.randint(0, self.max_cube_size - self.cube_size + 1)
@@ -71,7 +76,19 @@ class InstanceCubesDataset(IterableDataset):
 
         vol = vol[x_offset:self.cube_size+x_offset, y_offset:y_offset+self.cube_size, z_offset:z_offset+self.cube_size]
         lbl = lbl[x_offset:self.cube_size+x_offset, y_offset:y_offset+self.cube_size, z_offset:z_offset+self.cube_size]
-        return vol, lbl
+
+        if any(a<b for a,b in zip(self.output_volume_size, (256, 256, 256))):
+            vol = self._downscale(vol, self.output_volume_size)
+            lbl = self._downscale(lbl, self.output_volume_size)
+        return InstanceVolumeBatch(vol, lbl)
+
+    def _downscale(self, tensor: torch.Tensor, new_size: tuple[int, int, int]) -> torch.Tensor:
+        return F.interpolate(
+                tensor[None, None].float(), 
+                size=new_size, 
+                mode='trilinear', 
+                align_corners=True
+            )[0][0]
 
     def _gather_batch(self, cube_path: Path):
         vol, lbl = self._get_label_and_volume(cube_path)

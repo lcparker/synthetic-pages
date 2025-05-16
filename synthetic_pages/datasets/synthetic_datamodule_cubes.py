@@ -4,6 +4,7 @@ import numpy as np
 from torch.utils.data import IterableDataset
 import nrrd
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from scipy.ndimage import gaussian_filter
 
@@ -49,12 +50,20 @@ class SyntheticInstanceCubesDataset(IterableDataset):
                  reference_label_filename: str,
                  spatial_transform: bool = True,
                  layer_dropout: bool = False,
-                 layer_shuffle: bool = True):
+                 layer_shuffle: bool = True,
+                 num_layers_range: Tuple[int, int] = (6, 17),
+                 output_volume_size: Tuple[int, int, int] = (256, 256, 256)):
         self.cube_size = 256
         self.max_cube_size = 256
         self.spatial_transform = spatial_transform
         self.layer_dropout = layer_dropout
         self.layer_shuffle = layer_shuffle
+        
+        assert len(num_layers_range) == 2 and num_layers_range[0] < num_layers_range[1], f"num_layers_range must be tuple of (min, max) but was {num_layers_range}"
+        self.num_layers_range = num_layers_range
+
+        assert len(output_volume_size) == 3, f"output_volume_size must be tuple of (height, width, depth) but was {output_volume_size}"
+        self.output_volume_size = output_volume_size
 
         self.reference_vol, ___ = nrrd.read(reference_volume_filename, index_order='C')
         self.reference_lbl, ___ = nrrd.read(reference_label_filename, index_order='C')
@@ -89,7 +98,19 @@ class SyntheticInstanceCubesDataset(IterableDataset):
         if self.layer_shuffle:
             lbl = self.cube_loader.shuffle_layers(lbl)
 
-        return InstanceVolumeBatch(vol=torch.from_numpy(vol), lbl=lbl)
+        vol = torch.from_numpy(vol)
+        if any(a<b for a,b in zip(self.output_volume_size, (256, 256, 256))):
+            vol = self._downscale(vol, self.output_volume_size)
+            lbl = self._downscale(lbl, self.output_volume_size)
+        return InstanceVolumeBatch(vol, lbl)
+
+    def _downscale(self, tensor: torch.Tensor, new_size: tuple[int, int, int]) -> torch.Tensor:
+        return F.interpolate(
+                tensor[None, None].float(), 
+                size=new_size, 
+                mode='trilinear', 
+                align_corners=True
+            )[0][0]
 
     def _generate_label_and_vol(self) -> Tuple[np.ndarray, np.ndarray]: # ((H, W, D), (H, W, D))
         """First pass. Required a LOT of turning and fiddling"""
@@ -98,7 +119,7 @@ class SyntheticInstanceCubesDataset(IterableDataset):
         x_control_points = num_control_points
         y_control_points = num_control_points
         z_control_points = 5
-        num_pages = np.random.randint(7, 16)
+        num_pages = np.random.randint(self.num_layers_range[0], self.num_layers_range[1])
         bbox = BoundingBox2D((0, 0), (1, 1))
 
         control_points_3d = make_control_points_3d(x_control_points, y_control_points, bbox)
