@@ -78,17 +78,24 @@ class InstanceCubesDataset(IterableDataset):
         lbl = lbl[x_offset:self.cube_size+x_offset, y_offset:y_offset+self.cube_size, z_offset:z_offset+self.cube_size]
 
         if any(a<b for a,b in zip(self.output_volume_size, (256, 256, 256))):
-            vol = self._downscale(vol, self.output_volume_size)
-            lbl = self._downscale(lbl, self.output_volume_size)
-        return InstanceVolumeBatch(vol, lbl)
+            return self._downscale(InstanceVolumeBatch(vol, lbl), self.output_volume_size)
+        else: 
+            return InstanceVolumeBatch(vol, lbl)
 
-    def _downscale(self, tensor: torch.Tensor, new_size: tuple[int, int, int]) -> torch.Tensor:
-        return F.interpolate(
-                tensor[None, None].float(), 
+    def _downscale(self, batch: InstanceVolumeBatch, new_size: tuple[int, int, int]) -> InstanceVolumeBatch:
+        return InstanceVolumeBatch(
+            F.interpolate(
+                batch.vol[None, None].float(), 
                 size=new_size, 
                 mode='trilinear', 
                 align_corners=True
-            )[0][0]
+            )[0][0],
+            F.interpolate(
+                batch.lbl[None].float(), 
+                size=new_size, 
+                mode='trilinear', 
+                align_corners=True
+            )[0].long())
 
     def _gather_batch(self, cube_path: Path):
         vol, lbl = self._get_label_and_volume(cube_path)
