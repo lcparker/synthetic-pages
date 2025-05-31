@@ -52,12 +52,15 @@ class SyntheticInstanceCubesDataset(IterableDataset):
                  layer_dropout: bool = False,
                  layer_shuffle: bool = True,
                  num_layers_range: Tuple[int, int] = (6, 17),
-                 output_volume_size: Tuple[int, int, int] = (256, 256, 256)):
+                 output_volume_size: Tuple[int, int, int] = (256, 256, 256),
+                 epoch_size: int = 50):
         self.cube_size = 256
         self.max_cube_size = 256
         self.spatial_transform = spatial_transform
         self.layer_dropout = layer_dropout
         self.layer_shuffle = layer_shuffle
+        assert isinstance(epoch_size, int) and epoch_size > 0, f"epoch_size must be a positive integer but was {epoch_size}"
+        self.epoch_size = epoch_size
         
         assert len(num_layers_range) == 2 and num_layers_range[0] < num_layers_range[1], f"num_layers_range must be tuple of (min, max) but was {num_layers_range}"
         self.num_layers_range = num_layers_range
@@ -77,10 +80,10 @@ class SyntheticInstanceCubesDataset(IterableDataset):
 
 
     def __len__(self):
-        return 50
+        return self.epoch_size
 
     def __iter__(self):
-        for i in range(500):
+        for i in range(self.epoch_size):
             yield self._gather_batch()
 
     def _gather_batch(self):
