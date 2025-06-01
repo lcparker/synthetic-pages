@@ -83,7 +83,7 @@ class SyntheticInstanceCubesDataset(IterableDataset):
         return self.epoch_size
 
     def __iter__(self):
-        for i in range(self.epoch_size):
+        for i in range(500):
             yield self._gather_batch()
 
     def _gather_batch(self):
