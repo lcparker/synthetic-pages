@@ -113,7 +113,7 @@ if __name__ == "__main__":
 
     control_points = deform_control_points(control_points)
     pc = unit_plane_3d(num_points_per_axis=40)
-    planes = [HomogeneousTransform.translation(0,0,z).apply(pc) for z in np.linspace(0,1,10)]
+    planes = [HomogeneousTransform.translation((0,0,z)).apply(pc) for z in np.linspace(0,1,10)]
     deformed_planes = [bezier_space_deformation(control_points, plane) for plane in planes]
     print(f'no overlaps?: {control_points_well_ordered(control_points)}')
     fig, ax = plot_point_cloud(control_points.reshape(-1, 3))

@@ -6,6 +6,8 @@ from synthetic_pages.types.mesh import Mesh
 import numpy as np
 from scipy.spatial.transform import Rotation
 
+from synthetic_pages.types.types import Point3D
+
 
 Transformable = TypeVar('Transformable', Mesh, np.ndarray)
 class HomogeneousTransform:
@@ -21,14 +23,16 @@ class HomogeneousTransform:
             return self._apply_mesh(x)
         elif isinstance(x, np.ndarray):
             return self._apply_ndarray(x)
+        elif _is_Point3D(x):
+            return self._apply_point(x)
         else:
             raise ValueError(f"Unsupported type for matrix multiplication: {type(x)}")
 
     @staticmethod
-    def translation(x: float, y: float, z: float):
+    def translation(point: Point3D):
         # Create translation matrix
         translation_matrix = np.eye(4)
-        translation_matrix[:3, 3] = np.array([x,y,z])
+        translation_matrix[:3, 3] = np.array(point)
         return HomogeneousTransform(translation_matrix)
 
     @staticmethod
@@ -67,5 +71,25 @@ class HomogeneousTransform:
 
         return transformed_points
 
+    def _apply_point(self, point: Point3D) -> np.ndarray:
+        # Convert points to homogeneous coordinates by adding a 1 in the last dimension
+        homogeneous_coordinates = np.array([point[0], point[1], point[2], 1])
+        transformed_point_homogeneous = homogeneous_coordinates @ self.matrix.T
+
+        # Convert back to 3D coordinates
+        transformed_point = transformed_point_homogeneous[..., :3] / transformed_point_homogeneous[..., 3, np.newaxis]
+
+        return transformed_point
+
+
     def _apply_mesh(self, mesh: Mesh) -> Mesh:
         return Mesh(self.apply(mesh.points), mesh.triangles)
+
+
+def _is_Point3D(obj):
+    return (isinstance(obj, tuple)
+            and len(obj) == 3 
+            and all(_is_number(x) for x in obj))
+
+
+def _is_number(obj): return isinstance(obj, int|float)

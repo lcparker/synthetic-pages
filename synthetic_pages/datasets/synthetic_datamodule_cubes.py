@@ -146,7 +146,7 @@ class SyntheticInstanceCubesDataset(IterableDataset):
         control_points = control_points - [0, 0, 0.25]
 
         pc = unit_plane_3d(num_points_per_axis=70)
-        planes = [HomogeneousTransform.translation(0, 0, z).apply(pc) for z in np.linspace(0, 1, num_pages)]
+        planes = [HomogeneousTransform.translation((0, 0, z)).apply(pc) for z in np.linspace(0, 1, num_pages)]
         deformed_planes = [bezier_space_deformation(control_points, plane) for plane in planes]
 
         meshes = [Mesh(dp, triangulate_pointcloud(pc).triangles) for dp in deformed_planes]

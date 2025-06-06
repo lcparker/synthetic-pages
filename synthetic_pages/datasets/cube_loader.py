@@ -10,6 +10,7 @@ class CubeLoader(ABC):
 
     @staticmethod
     def spatial_transform_logic(vol: np.ndarray, lbl: np.ndarray, cube_size: int):
+        # TODO this is slow, can probably be made faster by transforming pages before voxelisation
         # flip vol randomly
         if np.random.randint(0, 2):
             lbl = np.flip(lbl, axis=0)

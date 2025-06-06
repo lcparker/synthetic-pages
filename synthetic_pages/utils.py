@@ -199,7 +199,7 @@ def tesselate_pages(control_points, bbox_3d: BoundingBox3D, num_pages: int, spac
     mesh_centre = mesh.points.mean(axis=0)
     mesh = Mesh(mesh.points - mesh_centre, mesh.triangles)
     zs = np.linspace(-spacing * num_pages/2, spacing * num_pages/2, num_pages)
-    meshes= [HomogeneousTransform.translation(0,0,z).apply(mesh) for z in zs]
+    meshes= [HomogeneousTransform.translation((0,0,z)).apply(mesh) for z in zs]
     tf = HomogeneousTransform.random_transform(bbox_3d)
     meshes= [tf.apply(mesh) for mesh in meshes]
     return meshes
