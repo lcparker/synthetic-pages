@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import NamedTuple, Tuple
 
 import numpy as np
-from torch.utils.data import IterableDataset
+from torch.utils.data import Dataset
 import nrrd
 import torch
 import torch.nn.functional as F
@@ -14,7 +14,7 @@ from synthetic_pages.datasets.instance_volume_batch import InstanceVolumeBatch
 from .cube_loader import CubeLoader
 
 
-class InstanceCubesDataset(IterableDataset):
+class InstanceCubesDataset(Dataset):
     """
     Datamodule for real scroll cubes and the corresponding instance masks.
 
@@ -57,11 +57,9 @@ class InstanceCubesDataset(IterableDataset):
     def __len__(self):
         return len(self.volume_list)
 
-    def __iter__(self):
-        random.shuffle(self.volume_list)
-
-        for cube in self.volume_list:
-            yield self._gather_batch(cube)
+    def __getitem__(self, index: int) -> InstanceVolumeBatch:
+        cube = self.volume_list[index]
+        return self._gather_batch(cube)
 
     def _get_label_and_volume(self, cube_path: Path) -> InstanceVolumeBatch:
 

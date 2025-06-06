@@ -36,6 +36,30 @@ class HomogeneousTransform:
         return HomogeneousTransform(translation_matrix)
 
     @staticmethod
+    def flip(axis: Point3D):
+        """
+        Creates a flip transform along the provided axis. axis must be a normal vector
+        """
+        axis_length = np.linalg.norm(axis)
+        if not np.isclose(axis_length-1., 0.):
+            raise ValueError(f"Input axis must be a unit vector, but has length {axis_length}")
+
+        vec = np.array(axis)[None, ...]
+        matrix = np.eye(4)
+  
+        matrix[:3, :3] =  -vec.T @ vec
+        return HomogeneousTransform(matrix)
+
+
+    @staticmethod
+    def scale(scale_factor: int):
+        if not _is_number(scale_factor):
+
+            mat = np.eye(4)
+            mat[:3, :3] *= scale_factor
+            return HomogeneousTransform(mat)
+        
+    @staticmethod
     def random_transform(bbox: BoundingBox3D):
         # Generate random rotation
         rotation = Rotation.random().as_matrix()

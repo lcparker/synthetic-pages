@@ -5,7 +5,7 @@ from torch.utils.data import IterableDataset
 import nrrd
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
+from torch.utils.data import Dataset
 from scipy.ndimage import gaussian_filter
 
 from synthetic_pages.datasets.instance_volume_batch import InstanceVolumeBatch
@@ -25,7 +25,7 @@ from synthetic_pages.utils import (
 from synthetic_pages.bezier_volume_deformation import bezier_space_deformation
 
 
-class SyntheticInstanceCubesDataset(IterableDataset):
+class SyntheticInstanceCubesDataset(Dataset):
     """
     Produces a voxel cube of stacked synthetic pages that vary progressively.
 
@@ -82,9 +82,10 @@ class SyntheticInstanceCubesDataset(IterableDataset):
     def __len__(self):
         return self.epoch_size
 
-    def __iter__(self):
-        for i in range(500):
-            yield self._gather_batch()
+    def __getitem__(self, index: int) -> InstanceVolumeBatch:
+        if index < 0 or index >= len(self):
+            raise IndexError(f"Index {index} out of bounds for dataset of length {len(self)}")
+        return self._gather_batch() # Index is not actually used
 
     def _gather_batch(self):
         vol, lbl = self._generate_label_and_vol()
