@@ -47,7 +47,7 @@ class HomogeneousTransform:
         vec = np.array(axis)[None, ...]
         matrix = np.eye(4)
   
-        matrix[:3, :3] =  -vec.T @ vec
+        matrix[:3, :3] =  np.eye(3) - 2 * vec.T @ vec
         return HomogeneousTransform(matrix)
 
 
