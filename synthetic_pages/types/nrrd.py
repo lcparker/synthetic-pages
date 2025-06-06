@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Literal
 
 import numpy as np
-import torch  # Ensure PyTorch is imported for tensor handling
+import torch
 
 class Nrrd:
     def __init__(self, volume: np.ndarray, metadata) -> None:

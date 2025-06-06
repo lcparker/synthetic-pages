@@ -60,6 +60,12 @@ class HomogeneousTransform:
             return HomogeneousTransform(mat)
         
     @staticmethod
+    def random_rotation():
+        rotation_matrix = np.eye(4)
+        rotation_matrix[:3, :3] = Rotation.random().as_matrix()
+        return HomogeneousTransform(rotation_matrix)
+        
+    @staticmethod
     def random_transform(bbox: BoundingBox3D):
         # Generate random rotation
         rotation = Rotation.random().as_matrix()
