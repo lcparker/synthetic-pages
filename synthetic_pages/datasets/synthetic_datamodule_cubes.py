@@ -1,7 +1,6 @@
 import random
 from typing import Tuple
 import numpy as np
-from torch.utils.data import IterableDataset
 import nrrd
 import torch
 import torch.nn.functional as F
@@ -90,7 +89,8 @@ class SyntheticInstanceCubesDataset(Dataset):
         return self._gather_batch() # Index is not actually used
 
     def _gather_batch(self):
-        vol, lbl = self._generate_label_and_vol()
+        num_pages = np.random.randint(self.num_layers_range[0], self.num_layers_range[1])
+        vol, lbl = self._generate_label_and_vol(num_pages)
 
         if self.layer_dropout:
             vol, lbl = self.cube_loader.dropout_page_layers(vol, lbl)
@@ -126,14 +126,13 @@ class SyntheticInstanceCubesDataset(Dataset):
                 align_corners=True
             )[0].long())
 
-    def _generate_label_and_vol(self) -> Tuple[np.ndarray, np.ndarray]: # ((H, W, D), (H, W, D))
+    def _generate_label_and_vol(self, num_pages: int) -> Tuple[np.ndarray, np.ndarray]: # ((H, W, D), (H, W, D))
         """First pass. Required a LOT of turning and fiddling"""
 
         num_control_points = np.random.randint(3, 8)
         x_control_points = num_control_points
         y_control_points = num_control_points
         z_control_points = 5
-        num_pages = np.random.randint(self.num_layers_range[0], self.num_layers_range[1])
         bbox = BoundingBox2D((0, 0), (1, 1))
 
         control_points_3d = make_control_points_3d(x_control_points, y_control_points, bbox)
@@ -181,7 +180,7 @@ class SyntheticInstanceCubesDataset(Dataset):
         output_vol = output_vol.astype(np.float32)
 
         # add a random offset to each label
-        values = np.unique(labels)
+        values = np.arange(num_pages)
         for value in values[1:]:
             output_vol[labels == value] += np.random.randint(-4000, 4000)
 
