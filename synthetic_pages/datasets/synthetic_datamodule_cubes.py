@@ -51,6 +51,7 @@ class SyntheticInstanceCubesDataset(Dataset):
                  spatial_transform: bool = True,
                  layer_dropout: bool = False,
                  layer_shuffle: bool = True,
+                 remove_duplicate_labels: bool = True,
                  num_layers_range: Tuple[int, int] = (6, 17),
                  output_volume_size: Tuple[int, int, int] = (256, 256, 256),
                  epoch_size: int = 50):
@@ -59,6 +60,7 @@ class SyntheticInstanceCubesDataset(Dataset):
         self.spatial_transform = spatial_transform
         self.layer_dropout = layer_dropout
         self.layer_shuffle = layer_shuffle
+        self.remove_duplicate_labels = remove_duplicate_labels
         assert isinstance(epoch_size, int) and epoch_size > 0, f"epoch_size must be a positive integer but was {epoch_size}"
         self.epoch_size = epoch_size
         
@@ -96,7 +98,8 @@ class SyntheticInstanceCubesDataset(Dataset):
         if self.spatial_transform:
             vol, lbl = self.cube_loader.spatial_transform_logic(vol, lbl, cube_size=self.cube_size)
 
-        lbl = self.cube_loader.remove_empty_labels(lbl)
+        if self.remove_duplicate_labels:
+            lbl = self.cube_loader.remove_empty_labels(lbl, num_pages)
 
         lbl = self.cube_loader.one_hot(lbl)
         if self.layer_shuffle:
@@ -159,7 +162,6 @@ class SyntheticInstanceCubesDataset(Dataset):
         labels = np.repeat(np.repeat(np.repeat(labels, 4, axis=0), 4, axis=1), 4, axis=2)
         inner_labels = page_meshes_to_volume(meshes, 64, page_thickness / 2, BoundingBox3D((0.1, 0.1, 0.1), (0.9, 0.9, 0.9)))
         inner_labels = np.repeat(np.repeat(np.repeat(inner_labels, 4, axis=0), 4, axis=1), 4, axis=2)
-
 
         # now add intensity/texture to make an output volume ------------------------------------------------
         output_vol = np.zeros_like(labels, dtype=np.float32)
