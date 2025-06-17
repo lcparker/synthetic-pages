@@ -39,6 +39,7 @@ class InstanceCubesDataset(Dataset):
                  spatial_transform: bool = True,
                  layer_dropout: bool = False,
                  layer_shuffle: bool = True,
+                 remove_empty_labels: bool = True,
                  output_volume_size: Tuple[int, int, int] = (256, 256, 256),
                  ):
         self.cube_size = 256
@@ -46,6 +47,7 @@ class InstanceCubesDataset(Dataset):
         self.spatial_transform = spatial_transform
         self.layer_dropout = layer_dropout
         self.layer_shuffle = layer_shuffle
+        self.remove_empty_labels = remove_empty_labels
 
         assert len(output_volume_size) == 3, f"output_volume_size must be tuple of (height, width, depth) but was {output_volume_size}"
         self.output_volume_size = output_volume_size
@@ -74,11 +76,8 @@ class InstanceCubesDataset(Dataset):
 
         vol = vol[x_offset:self.cube_size+x_offset, y_offset:y_offset+self.cube_size, z_offset:z_offset+self.cube_size]
         lbl = lbl[x_offset:self.cube_size+x_offset, y_offset:y_offset+self.cube_size, z_offset:z_offset+self.cube_size]
+        return InstanceVolumeBatch(vol=vol, lbl=lbl)
 
-        if any(a<b for a,b in zip(self.output_volume_size, (256, 256, 256))):
-            return self._downscale(InstanceVolumeBatch(vol, lbl), self.output_volume_size)
-        else: 
-            return InstanceVolumeBatch(vol, lbl)
 
     def _downscale(self, batch: InstanceVolumeBatch, new_size: tuple[int, int, int]) -> InstanceVolumeBatch:
         return InstanceVolumeBatch(
@@ -104,10 +103,16 @@ class InstanceCubesDataset(Dataset):
         if self.spatial_transform:
             vol, lbl = self.cube_loader.spatial_transform_logic(vol, lbl, cube_size=self.cube_size)
 
-        lbl = self.cube_loader.remove_empty_labels(lbl)
+        if self.remove_empty_labels:
+            num_pages = np.unique(lbl)
+            lbl = self.cube_loader.remove_empty_labels(lbl, num_pages)
 
         lbl = self.cube_loader.one_hot(lbl)
         if self.layer_shuffle:
             lbl = self.cube_loader.shuffle_layers(lbl)
 
-        return InstanceVolumeBatch(vol=torch.from_numpy(vol), lbl=lbl)
+        vol = torch.from_numpy(vol)
+        if any(a<b for a,b in zip(self.output_volume_size, (256, 256, 256))):
+            return self._downscale(InstanceVolumeBatch(vol, lbl), self.output_volume_size)
+        else: 
+            return InstanceVolumeBatch(vol, lbl)

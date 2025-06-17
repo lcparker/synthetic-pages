@@ -79,8 +79,12 @@ class CubeLoader(ABC):
         return shuffled_layers
 
     @staticmethod
-    def remove_empty_labels(lbl: np.ndarray):
+    def remove_empty_labels(lbl: np.ndarray, num_pages: int):
         uniques = np.unique(lbl)
+        if not (num_pages+1 == len(uniques)):
+            print(f"Warning: Expected {num_pages+1} unique labels, found {len(uniques)} ({uniques}).")
+        else:
+            print(f"Removing empty labels, found {len(uniques)} unique labels, num_pages={num_pages}")
         largest_label = lbl.max()
         if (largest_label + 1) > len(uniques):
             for i in range(1, len(uniques)):

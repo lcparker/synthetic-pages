@@ -50,7 +50,7 @@ class SyntheticInstanceCubesDataset(Dataset):
                  spatial_transform: bool = True,
                  layer_dropout: bool = False,
                  layer_shuffle: bool = True,
-                 remove_duplicate_labels: bool = True,
+                 remove_empty_labels: bool = True,
                  num_layers_range: Tuple[int, int] = (6, 17),
                  output_volume_size: Tuple[int, int, int] = (256, 256, 256),
                  epoch_size: int = 50):
@@ -59,7 +59,7 @@ class SyntheticInstanceCubesDataset(Dataset):
         self.spatial_transform = spatial_transform
         self.layer_dropout = layer_dropout
         self.layer_shuffle = layer_shuffle
-        self.remove_duplicate_labels = remove_duplicate_labels
+        self.remove_empty_labels = remove_empty_labels
         assert isinstance(epoch_size, int) and epoch_size > 0, f"epoch_size must be a positive integer but was {epoch_size}"
         self.epoch_size = epoch_size
         
@@ -98,7 +98,7 @@ class SyntheticInstanceCubesDataset(Dataset):
         if self.spatial_transform:
             vol, lbl = self.cube_loader.spatial_transform_logic(vol, lbl, cube_size=self.cube_size)
 
-        if self.remove_duplicate_labels:
+        if self.remove_empty_labels:
             lbl = self.cube_loader.remove_empty_labels(lbl, num_pages)
 
         lbl = self.cube_loader.one_hot(lbl)
