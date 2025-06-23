@@ -41,6 +41,7 @@ class InstanceCubesDataset(Dataset):
                  layer_shuffle: bool = True,
                  remove_empty_labels: bool = True,
                  output_volume_size: Tuple[int, int, int] = (256, 256, 256),
+                 max_num_volumes: int|None = None,
                  ):
         self.cube_size = 256
         self.max_cube_size = 256
@@ -51,13 +52,17 @@ class InstanceCubesDataset(Dataset):
 
         assert len(output_volume_size) == 3, f"output_volume_size must be tuple of (height, width, depth) but was {output_volume_size}"
         self.output_volume_size = output_volume_size
+        self.max_num_volumes = max_num_volumes
 
         self.volume_list = list(dataset_path.glob('*_volume.nrrd'))
         self.cube_loader = CubeLoader()
         self.cube_path = dataset_path
 
     def __len__(self):
-        return len(self.volume_list)
+        if self.max_num_volumes is not None:
+            return min(self.max_num_volumes, len(self.volume_list))
+        else:
+            return len(self.volume_list)
 
     def __getitem__(self, index: int) -> InstanceVolumeBatch:
         cube = self.volume_list[index]
