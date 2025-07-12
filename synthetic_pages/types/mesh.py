@@ -18,56 +18,52 @@ class Mesh:
         self.points = points
         self.triangles = triangles
 
-    def show_wireframe(self):
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(111, projection='3d')
+    def show(self,
+            wireframe: bool = False,
+            show: bool = True,
+            *,
+            fov_deg: float = 60.0,
+            pad: float = 1.2,
+            ):
+        Mesh.show([self], wireframe=wireframe, show=show, fov_deg=fov_deg, pad=pad)
 
-        for triangle in self.triangles:
-            closed_triangle = np.append(triangle, triangle[0])  # To close the triangle
-            ax.plot(self.points[closed_triangle, 0], 
-                    self.points[closed_triangle, 1], 
-                    self.points[closed_triangle, 2], 'k-')
+    @staticmethod
+    def show(meshes: list['Mesh'],
+            wireframe: bool = False,
+            show: bool = True,
+            *,
+            fov_deg: float = 60.0,
+            pad: float = 1.2,
+            ):
+        import trimesh
 
-        ax.plot(self.points[..., 0], self.points[..., 1], self.points[..., 2], 'o', markersize=5, color='red')
+        if not meshes:
+            raise ValueError("No meshes provided to show.")
 
-        ax.set_title('3D Mesh with Delaunay Triangulation')
-        ax.set_xlabel('X-axis')
-        ax.set_ylabel('Y-axis')
-        plt.show()
+        # Create a Trimesh Scene with all meshes
+        scene = trimesh.Scene()
+        for mesh in meshes:
+            tm = trimesh.Trimesh(vertices=mesh.points, faces=mesh.triangles, process=False)
+            scene.add_geometry(tm)
 
-    def scene_with_mesh_in_it(self, fig=None, ax=None) -> tuple[Figure, Axes]:
-        fig = plt.figure(figsize=(10, 8)) if fig is None else fig
-        ax = fig.add_subplot(111, projection='3d') if ax is None else ax
+        if wireframe:
+            edges = trimesh.load_path(np.concatenate([m.triangles for m in meshes]))
+            scene.add_geometry(edges, geom_name="wire")
 
-        x = self.points[:, 0]
-        y = self.points[:, 1]
-        z = self.points[:, 2]
+        scene.rezero()
 
-        ax.plot_trisurf(x, y, self.triangles, z, cmap='viridis', lw=1, edgecolor='none')
+        radius = tm.bounding_sphere.primitive.radius
+        distance = pad * radius / np.sin(np.radians(fov_deg) / 2)
 
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        ax.set_title('3D Mesh with Filled Surface')
+        scene.set_camera(distance=distance,
+                        center=[0.0, 0.0, 0.0],
+                        fov=[fov_deg, fov_deg])
 
-        return fig, ax
+        # widen clip planes to avoid accidental slicing
+        scene.camera.z_far = 4 * distance
+        scene.camera.z_near = max(distance / 1000, 1e-3)
 
-    def show(self, fig=None, ax=None):
-        fig = plt.figure(figsize=(10, 8)) if fig is None else fig
-        ax = fig.add_subplot(111, projection='3d') if ax is None else ax
-
-        x = self.points[:, 0]
-        y = self.points[:, 1]
-        z = self.points[:, 2]
-
-        ax.plot_trisurf(x, y, self.triangles, z, cmap='viridis', lw=1, edgecolor='none')
-
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        ax.set_title('3D Mesh with Filled Surface')
-
-        plt.show()
+        return scene.show(flags={'cull': False}) if show else scene
 
     @staticmethod
     def _stream_obj_elements(file_path: Path | str, chunk_size: int = 8192):
