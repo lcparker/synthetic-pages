@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 
+from synthetic_pages.types.bounding_box_3d import BoundingBox
+
 class Mesh:
     def __init__(self, points, triangles):
         assert points.shape[-1] == 3
@@ -17,6 +19,7 @@ class Mesh:
 
         self.points = points
         self.triangles = triangles
+        self.bounding_box = BoundingBox.from_min_max(self.points[:, 0].min(), self.points[:, 0].max())
 
     def show(self,
             wireframe: bool = False,

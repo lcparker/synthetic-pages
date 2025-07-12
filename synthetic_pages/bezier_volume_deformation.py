@@ -1,7 +1,7 @@
 from matplotlib import pyplot as plt
 import numpy as np
 from synthetic_pages.types.homogeneous_transform import HomogeneousTransform
-from synthetic_pages.types.bounding_box_3d import BoundingBox3D
+from synthetic_pages.types.bounding_box_3d import BoundingBox
 from synthetic_pages.utils import bernstein, page_meshes_to_volume, save_labelmap, triangulate_pointcloud, unit_plane_3d
 from synthetic_pages.types.mesh import Mesh
 
@@ -107,7 +107,7 @@ def deform_control_points(control_points: np.ndarray) -> np.ndarray:
 
 
 if __name__ == "__main__":
-    volume_bbox = BoundingBox3D((0,0,0), (1,1,1))
+    volume_bbox = BoundingBox.from_min_max((0,0,0), (1,1,1))
     control_points = volume_bbox.to_grid(5, 5, 5)
 
 

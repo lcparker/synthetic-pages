@@ -1,5 +1,5 @@
 from typing import TypeVar
-from synthetic_pages.types.bounding_box_3d import BoundingBox3D
+from synthetic_pages.types.bounding_box_3d import BoundingBox
 from synthetic_pages.types.mesh import Mesh
 
 
@@ -66,7 +66,7 @@ class HomogeneousTransform:
         return HomogeneousTransform(rotation_matrix)
         
     @staticmethod
-    def random_transform(bbox: BoundingBox3D):
+    def random_transform(bbox: BoundingBox):
         # Generate random rotation
         rotation = Rotation.random().as_matrix()
 
@@ -80,7 +80,7 @@ class HomogeneousTransform:
         # Create translation matrix
         translation_matrix = np.eye(4)
         # translation_matrix[:3, 3] = translation
-        translation_matrix[:3, 3] = 0.5 * (np.array(bbox.min) + np.array(bbox.max))
+        translation_matrix[:3, 3] = 0.5 * (np.array((bbox.x_start, bbox.y_start, bbox.z_start)) + np.array((bbox.x_end, bbox.y_end, bbox.z_end)))
 
         # Combine rotation, scaling, and translation into a single transformation matrix
         transform_matrix = translation_matrix @ scale_matrix

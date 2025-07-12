@@ -10,7 +10,7 @@ from scipy.ndimage import gaussian_filter
 from synthetic_pages.datasets.instance_volume_batch import InstanceVolumeBatch
 from synthetic_pages.types.homogeneous_transform import HomogeneousTransform
 from synthetic_pages.types.bounding_box_2d import BoundingBox2D
-from synthetic_pages.types.bounding_box_3d import BoundingBox3D
+from synthetic_pages.types.bounding_box_3d import BoundingBox
 
 from .cube_loader import CubeLoader
 
@@ -157,9 +157,9 @@ class SyntheticInstanceCubesDataset(Dataset):
         page_thickness = 0.05
         if num_pages > 10:
             page_thickness = 0.04
-        labels = page_meshes_to_volume(meshes, 64, page_thickness, BoundingBox3D((0.1, 0.1, 0.1), (0.9, 0.9, 0.9)))
+        labels = page_meshes_to_volume(meshes, 64, page_thickness, BoundingBox.from_min_max((0.1, 0.1, 0.1), (0.9, 0.9, 0.9)))
         labels = np.repeat(np.repeat(np.repeat(labels, 4, axis=0), 4, axis=1), 4, axis=2)
-        inner_labels = page_meshes_to_volume(meshes, 64, page_thickness / 2, BoundingBox3D((0.1, 0.1, 0.1), (0.9, 0.9, 0.9)))
+        inner_labels = page_meshes_to_volume(meshes, 64, page_thickness / 2, BoundingBox.from_min_max((0.1, 0.1, 0.1), (0.9, 0.9, 0.9)))
         inner_labels = np.repeat(np.repeat(np.repeat(inner_labels, 4, axis=0), 4, axis=1), 4, axis=2)
 
         # now add intensity/texture to make an output volume ------------------------------------------------

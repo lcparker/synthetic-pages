@@ -12,7 +12,7 @@ import vtk
 
 from synthetic_pages.types.homogeneous_transform import HomogeneousTransform
 from synthetic_pages.types.bounding_box_2d import BoundingBox2D
-from synthetic_pages.types.bounding_box_3d import BoundingBox3D
+from synthetic_pages.types.bounding_box_3d import BoundingBox
 from synthetic_pages.types.mesh import Mesh
 
 def bernstein(index: int, degree: int, t: np.ndarray) -> np.ndarray:
@@ -102,10 +102,10 @@ def make_control_points_3d(nx: int, ny: int, bounding_box: BoundingBox2D):
 
 ### MAKING THE VOLUME
 
-def make_grid(bbox: BoundingBox3D, points_per_axis: int):
-    xs = np.linspace(bbox.min[0], bbox.max[0], points_per_axis)
-    ys = np.linspace(bbox.min[1], bbox.max[1], points_per_axis)
-    zs = np.linspace(bbox.min[2], bbox.max[2], points_per_axis)
+def make_grid(bbox: BoundingBox, points_per_axis: int):
+    xs = np.linspace(bbox.x_start, bbox.x_end, points_per_axis)
+    ys = np.linspace(bbox.y_start, bbox.y_end, points_per_axis)
+    zs = np.linspace(bbox.z_start, bbox.z_end, points_per_axis)
     X, Y, Z = np.meshgrid(xs, ys, zs, indexing='ij')
     grid = np.stack((X, Y, Z), axis=-1)
     assert grid.shape[-1] == 3
@@ -137,18 +137,18 @@ def save_mask_as_nifti(mask, filename):
     nib.save(nifti_img, filename)
 
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
-def plot_bounding_box(ax, bbox: BoundingBox3D):
+def plot_bounding_box(ax, bbox: BoundingBox):
     """Plot a 3D bounding box."""
     # Define the vertices of the bounding box
     vertices = np.array([
-        [bbox.min[0], bbox.min[1], bbox.min[2]],
-        [bbox.max[0], bbox.min[1], bbox.min[2]],
-        [bbox.max[0], bbox.max[1], bbox.min[2]],
-        [bbox.min[0], bbox.max[1], bbox.min[2]],
-        [bbox.min[0], bbox.min[1], bbox.max[2]],
-        [bbox.max[0], bbox.min[1], bbox.max[2]],
-        [bbox.max[0], bbox.max[1], bbox.max[2]],
-        [bbox.min[0], bbox.max[1], bbox.max[2]]
+        [bbox.x_start, bbox.y_start, bbox.z_start],
+        [bbox.x_end, bbox.y_start, bbox.z_start],
+        [bbox.x_end, bbox.y_end, bbox.z_start],
+        [bbox.x_start, bbox.y_end, bbox.z_start],
+        [bbox.x_start, bbox.y_start, bbox.z_end],
+        [bbox.x_end, bbox.y_start, bbox.z_end],
+        [bbox.x_end, bbox.y_end, bbox.z_end],
+        [bbox.x_start, bbox.y_end, bbox.z_end]
     ])
     
     # Define the edges of the bounding box
@@ -175,7 +175,7 @@ def plot_bounding_box(ax, bbox: BoundingBox3D):
 
     return ax
 
-def _test_bounding_box_vis(control_points, bbox_3d: BoundingBox3D):
+def _test_bounding_box_vis(control_points, bbox_3d: BoundingBox):
     mesh = bezier_surface(control_points, 10)
     # centre mesh at [0,0,0]
     mesh_centre = mesh.points.mean(axis=0)
@@ -188,7 +188,7 @@ def _test_bounding_box_vis(control_points, bbox_3d: BoundingBox3D):
     ax = plot_bounding_box(ax, bbox_3d)
     plt.show()
 
-def tesselate_pages(control_points, bbox_3d: BoundingBox3D, num_pages: int, spacing: float) -> list[Mesh]:
+def tesselate_pages(control_points, bbox_3d: BoundingBox, num_pages: int, spacing: float) -> list[Mesh]:
     """
     Tesselate `num_pages` deformed planes evenly spaced along the z-axis,
     'spacing' units apart. Transforms them to the centre of the bounding box
@@ -204,25 +204,26 @@ def tesselate_pages(control_points, bbox_3d: BoundingBox3D, num_pages: int, spac
     meshes= [tf.apply(mesh) for mesh in meshes]
     return meshes
 
-def page_meshes_to_volume(page_meshes: list[Mesh], grid_size: int, page_thickness: float, bbox_3d: BoundingBox3D):
+def page_meshes_to_volume(page_meshes: list[Mesh], grid_size: int, page_thickness: float, bbox_3d: BoundingBox):
+    grid = bbox_3d.to_grid(grid_size, grid_size, grid_size)
     grid = make_grid(bbox_3d, grid_size)
     sdfs = np.array([compute_signed_distances(grid, m, distance_upper_bound = page_thickness/2) for m in page_meshes]).transpose((1,2,3,0)) # (H, W, D, N)
     page_labels = np.argmin(sdfs, axis=-1) + 1 # page labels are positive indices
     page_labels[sdfs.min(axis=-1) > page_thickness / 2] = 0 # no page is the zero index
     return page_labels
 
-def plot_bounding_box_vtk(renderer, bbox: BoundingBox3D):
+def plot_bounding_box_vtk(renderer, bbox: BoundingBox):
     """Plot a 3D bounding box in a VTK renderer."""
     # Define the vertices of the bounding box
     vertices = np.array([
-        [bbox.min[0], bbox.min[1], bbox.min[2]],
-        [bbox.max[0], bbox.min[1], bbox.min[2]],
-        [bbox.max[0], bbox.max[1], bbox.min[2]],
-        [bbox.min[0], bbox.max[1], bbox.min[2]],
-        [bbox.min[0], bbox.min[1], bbox.max[2]],
-        [bbox.max[0], bbox.min[1], bbox.max[2]],
-        [bbox.max[0], bbox.max[1], bbox.max[2]],
-        [bbox.min[0], bbox.max[1], bbox.max[2]]
+        [bbox.x_start,  bbox.y_start,   bbox.z_start],
+        [bbox.x_end,    bbox.y_start,   bbox.z_start],
+        [bbox.x_end,    bbox.y_end,     bbox.z_start],
+        [bbox.x_start,  bbox.y_end,     bbox.z_start],
+        [bbox.x_start,  bbox.y_start,   bbox.z_end],
+        [bbox.x_end,    bbox.y_start,   bbox.z_end],
+        [bbox.x_end,    bbox.y_end,     bbox.z_end],
+        [bbox.x_start,  bbox.y_end,     bbox.z_end]
     ])
     
     # Define the edges of the bounding box
