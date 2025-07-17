@@ -28,7 +28,9 @@ dependencies = [
     "typed-argument-parser==1.10.1",
     "types-python-dateutil==2.9.0.20240316",
     "typing-inspect==0.9.0",
-    "nibabel==5.3.2"
+    "nibabel==5.3.2",
+    "pyglet<2",
+    "shapely==2.1.1",
 ]
 
 [tool.setuptools]

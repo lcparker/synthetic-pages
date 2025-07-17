@@ -4,9 +4,7 @@ from pathlib import Path
 import tempfile
 import os
 
-import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
-from matplotlib.axes import Axes
+import trimesh
 
 from synthetic_pages.types.bounding_box_3d import BoundingBox
 
@@ -19,7 +17,16 @@ class Mesh:
 
         self.points = points
         self.triangles = triangles
-        self.bounding_box = BoundingBox.from_min_max(self.points[:, 0].min(), self.points[:, 0].max())
+        self.bounding_box = BoundingBox.from_min_max(self.points.min(axis=0), self.points.max(axis=0))
+
+    def as_trimesh(self) -> trimesh.Trimesh:
+        return trimesh.Trimesh(vertices=self.points, faces=self.triangles, process=False)
+
+    @staticmethod
+    def from_trimesh(tm: trimesh.Trimesh) -> 'Mesh':
+        if not isinstance(tm, trimesh.Trimesh):
+            raise ValueError("Input must be a trimesh.Trimesh object")
+        return Mesh(tm.vertices, tm.faces)
 
     def show(self,
             wireframe: bool = False,
@@ -28,10 +35,10 @@ class Mesh:
             fov_deg: float = 60.0,
             pad: float = 1.2,
             ):
-        Mesh.show([self], wireframe=wireframe, show=show, fov_deg=fov_deg, pad=pad)
+        Mesh.display_meshes([self], wireframe=wireframe, show=show, fov_deg=fov_deg, pad=pad)
 
     @staticmethod
-    def show(meshes: list['Mesh'],
+    def display_meshes(meshes: list['Mesh'],
             wireframe: bool = False,
             show: bool = True,
             *,
