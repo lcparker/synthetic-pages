@@ -51,7 +51,7 @@ class Nrrd:
             raise ValueError("Can't create nrrd object: invalid metadata")
 
     @staticmethod
-    def from_file(file: str | Path, index_order: Literal["F", "C"] = "F"):
+    def from_file(file: str | Path, index_order: Literal["F", "C"] = "C"):
         volume, metadata = nrrd.read(str(file), index_order = index_order)
         return Nrrd(volume, metadata)
 
@@ -79,7 +79,7 @@ class Nrrd:
         return Nrrd(volume, metadata)
 
     @staticmethod
-    def from_volume(volume: np.ndarray | torch.Tensor, metadata: dict = None):
+    def from_volume(volume: np.ndarray | torch.Tensor, metadata: dict|None = None):
         if isinstance(volume, torch.Tensor):
             volume = volume.numpy()  # Convert PyTorch tensor to NumPy array
 
@@ -101,5 +101,5 @@ class Nrrd:
 
         return Nrrd(volume, metadata)
 
-    def write(self, filename: str | Path, index_order: Literal["F", "C"] = "F") -> None:
+    def write(self, filename: str | Path, index_order: Literal["F", "C"] = "C") -> None:
         nrrd.write(file = str(filename), data = self.volume, header = self.metadata, index_order=index_order)

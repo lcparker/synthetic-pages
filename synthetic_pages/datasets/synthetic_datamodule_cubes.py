@@ -11,9 +11,8 @@ from synthetic_pages.datasets.instance_volume_batch import InstanceVolumeBatch
 from synthetic_pages.types.homogeneous_transform import HomogeneousTransform
 from synthetic_pages.types.bounding_box_2d import BoundingBox2D
 from synthetic_pages.types.bounding_box_3d import BoundingBox
-
+from synthetic_pages.types.nrrd import Nrrd
 from .cube_loader import CubeLoader
-
 from synthetic_pages.utils import (
     make_control_points_3d, 
     unit_plane_3d, 
@@ -69,9 +68,9 @@ class SyntheticInstanceCubesDataset(Dataset):
         assert len(output_volume_size) == 3, f"output_volume_size must be tuple of (height, width, depth) but was {output_volume_size}"
         self.output_volume_size = output_volume_size
 
-        self.reference_vol, ___ = nrrd.read(reference_volume_filename, index_order='C')
-        self.reference_lbl, ___ = nrrd.read(reference_label_filename, index_order='C')
-        self.reference_lbl, ___ = nrrd.read(reference_label_filename, index_order='C')
+        self.reference_vol = Nrrd.from_file(reference_volume_filename).volume
+        self.reference_lbl = Nrrd.from_file(reference_label_filename).volume
+        self.reference_lbl = Nrrd.from_file(reference_label_filename).volume
 
         self.air_intensity_mask = (self.reference_lbl == 0)
         self.outer_intensity_mask = (self.reference_lbl == 1)
