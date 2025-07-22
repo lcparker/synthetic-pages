@@ -100,7 +100,7 @@ if mesh_dir:
 
 # Collect and validate all TIFF files
 tiff_files = {}
-for file_path in input_dir.glob("*.tif*"):
+for file_path in input_dir.glob("*.tif"):
     if file_path.is_file():
         # Extract the number from filename
         base = file_path.stem
@@ -173,7 +173,7 @@ for z_start in range(bbox.z_start, bbox.z_end, chunk_size):
         logger.error(f"Failed to read image dimensions from {chunk_files[0]}: {str(e)}")
         continue
     
-    logger.info(f"Processing volume of size (Z={chunk_size})x(Y+{height})x(X={width})")
+    logger.info(f"Processing volume of size (Z={chunk_size})x(Y={height})x(X={width})")
     logger.info(f"Bounding box: x={bbox.x_start}:{bbox.x_end}, y={bbox.y_start}:{bbox.y_end}")
     
     try:
@@ -184,44 +184,36 @@ for z_start in range(bbox.z_start, bbox.z_end, chunk_size):
             
         # Load first image to get dimensions
         try:
-            with Image.open(chunk_files[0]) as image:
-                first_image_array = np.array(image)
-                
-                if first_image_array.shape != (height, width):
-                    logger.error(f"Image dimensions {first_image_array.shape} (y, x) don't match expected {(height, width)}")
-                    continue
-                    
+            with Image.open(chunk_files[0]) as img:
+                height, width = img.height, img.width
+                image_array = np.array(img)
         except Exception as e:
             logger.error(f"Failed to load TIFF file {chunk_files[0]}: {str(e)}")
             continue
         
-        height, width = first_image_array.shape
         logger.info(f"Loading TIFFS: Height/Y (axis 0) = {height}, Width/X (axis 1) = {width}")
         
         # Pre-allocate volume
-        volume = np.zeros((len(chunk_files), height, width), dtype=first_image_array.dtype)
-        volume[0] = first_image_array
+        volume = np.zeros((len(chunk_files), bbox.y_end - bbox.y_start,bbox.x_end - bbox.x_start), dtype=np.uint16)
+        volume[0] = image_array[bbox.y_start:bbox.y_end, bbox.x_start:bbox.x_end]
         
         # Load remaining images in parallel
-        def load_image(args):
-            idx, file_path = args
+        def load_image(idx, file_path, bbox):
             try:
-                with Image.open(file_path) as image:
-                    image_array = np.array(image)
-                    
-                    if image_array.shape != (height, width):
-                        raise ValueError(f"Image dimensions {image_array.shape} don't match expected {(height, width)}")
+                image = Image.open(file_path)
+                if (image.height, image.width) != (height, width):
+                    raise ValueError(f"Image dimensions {image_array.shape} don't match expected {(height, width)}")
+                arr = np.array(image)
+                image_array = arr[bbox.y_start:bbox.y_end, bbox.x_start:bbox.x_end]
+                del image, arr
                         
-                    return idx, image_array
+                return idx, image_array
             except Exception as e:
                 raise RuntimeError(f"Failed to load TIFF file {file_path}: {str(e)}")
         
-        with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(load_image, (i+1, f)) for i, f in enumerate(chunk_files[1:])]
-            
-            for future in tqdm(futures, desc="Loading TIFF files"):
-                idx, image_array = future.result()
-                volume[idx] = image_array
+        for i, f in enumerate(tqdm(chunk_files[1:], desc="Loading TIFF files")):
+            idx, image_array = load_image(i+1, f, bbox)
+            volume[idx] = image_array
         
         logger.info("TIFF stack loaded successfully")
         
@@ -257,13 +249,15 @@ for z_start in range(bbox.z_start, bbox.z_end, chunk_size):
                 clip_mesh_to_bounding_box(mesh, current_bounding_box) for mesh in meshes
             ]
 
-            if not any(mesh_section for mesh_section in mesh_sections):
+            if len(mesh_sections) > 0 and not any(mesh_section for mesh_section in mesh_sections):
                 logger.warning(f"No valid mesh sections for chunk {chunk} at z={z_start}, skipping...")
                 continue
             
             # Extract cube from volume
             try:
-                cube_data = volume[:, chunk.y_start:chunk.y_end, chunk.x_start:chunk.x_end]
+                x_pos = chunk.x_start - bbox.x_start
+                y_pos = chunk.y_start - bbox.y_start
+                cube_data = volume[:, y_pos:y_pos + chunk_size, x_pos:x_pos + chunk_size]
             except Exception as e:
                 logger.error(f"Failed to extract cube at coordinates {chunk}: {str(e)}")
                 continue
