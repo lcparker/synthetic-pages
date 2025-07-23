@@ -19,8 +19,8 @@ class Mesh:
         self.triangles = triangles
         self.bounding_box = BoundingBox.from_min_max(self.points.min(axis=0), self.points.max(axis=0))
 
-    def as_trimesh(self) -> trimesh.Trimesh:
-        return trimesh.Trimesh(vertices=self.points, faces=self.triangles, process=False)
+    def as_trimesh(self, process=False) -> trimesh.Trimesh:
+        return trimesh.Trimesh(vertices=self.points, faces=self.triangles, process=process)
 
     @staticmethod
     def from_trimesh(tm: trimesh.Trimesh) -> 'Mesh':
