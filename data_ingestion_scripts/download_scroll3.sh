@@ -12,7 +12,7 @@ fi
 # Check if correct number of arguments provided
 if [ $# -ne 2 ]; then
     echo "Usage: $0 START_NUM END_NUM"
-    echo "Downloads scroll images in parallel from START_NUM to END_NUM"
+    echo "Downloads scroll images (as TIFF) in parallel from START_NUM to END_NUM"
     echo "Example: $0 1 10"
     exit 1
 fi
