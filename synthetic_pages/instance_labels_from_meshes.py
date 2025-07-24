@@ -10,17 +10,8 @@ def load_page_meshes_from_zyx_header(position_header: str, labels_dir: Path):
     """
     Position header is a string like "03840_02048_02560" which corresponds to ZYX coordinate.
     """
-    # Meshes are stored in XYZ so we need to convert them to ZYX to match the Nrrd volumes
-    matrix = np.array([
-        [0, 0, 1, 0],  # X -> Z
-        [0, 1, 0, 0],  # Y -> Y 
-        [1, 0, 0, 0],  # Z -> X
-        [0, 0, 0, 1]
-    ])
-    xyz_to_zyx = HomogeneousTransform(matrix)
     mesh_files = labels_dir.glob(f'{position_header}_volume_mesh_*.obj')
-    meshes_xyz = [Mesh.from_obj(labels_dir/fp) for fp in mesh_files]
-    meshes_zyx = [xyz_to_zyx.apply(m) for m in meshes_xyz]
+    meshes_zyx = [Mesh.from_obj(labels_dir/fp) for fp in mesh_files]
     return meshes_zyx
 
 def generate_label_volume(input_volume: Nrrd, page_meshes_zyx: list[Mesh],/,papyrus_threshold: int, page_thickness_unitless: float):
